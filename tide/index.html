@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16141a">
+<title>Tide — cyclic breathing timer</title>
+<meta name="description" content="A paced breathing timer: cyclic breaths, an open-ended breath hold, and a timed recovery hold.">
+<style>
+:root{
+  --ink:#16141a;
+  --ink-2:#1e1b23;
+  --bone:#ece7dd;
+  --bone-dim:#98918a;
+  --faint:#6a635c;
+  --line:#2e2a33;
+  --tide:#7f9e7a;
+  --tide-fill:rgba(127,158,122,.20);
+  --clay:#c08457;
+  --shell:520px;
+  /* device fonts only: no webfont request, no font flash, file stays standalone.
+     the design needs the contrast between neutral sans and spoken serif italic,
+     not one specific face. */
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --serif:Georgia,'Iowan Old Style','Palatino Linotype','Noto Serif',serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{
+  background:#0e0d11;color:var(--bone);
+  font-family:var(--sans);font-weight:400;
+  display:flex;justify-content:center;
+  overscroll-behavior:none;
+}
+.shell{
+  width:100%;max-width:var(--shell);background:var(--ink);
+  min-height:100vh;min-height:100dvh;
+  display:flex;flex-direction:column;position:relative;overflow:hidden;
+}
+
+/* ---------- masthead ---------- */
+.masthead{
+  padding:calc(26px + env(safe-area-inset-top)) 26px 0;
+  display:flex;align-items:baseline;gap:12px;flex:0 0 auto;
+}
+.mark{font-family:var(--serif);font-style:italic;font-size:27px;font-weight:400;letter-spacing:-.4px}
+.tagline{font-size:11px;letter-spacing:1.9px;text-transform:uppercase;color:var(--faint)}
+
+.scroll{flex:1;overflow-y:auto;padding:0 26px 30px;-webkit-overflow-scrolling:touch}
+
+/* ---------- caution ---------- */
+.caution{
+  margin:26px 0 8px;padding-left:15px;
+  border-left:2px solid var(--clay);
+  font-size:12.5px;line-height:1.62;color:#b9ada0;
+}
+.caution b{display:block;font-family:var(--serif);font-style:italic;font-weight:400;
+  font-size:15px;color:var(--clay);margin-bottom:5px;letter-spacing:0}
+
+/* ---------- setting blocks ---------- */
+.block{padding:26px 0;border-bottom:1px solid var(--line)}
+.block:last-of-type{border-bottom:0}
+.kicker{
+  font-size:10.5px;letter-spacing:2.1px;text-transform:uppercase;
+  color:var(--faint);margin:0 0 3px;
+}
+.title{font-family:var(--serif);font-style:italic;font-weight:400;font-size:20px;margin:0 0 2px;letter-spacing:-.2px}
+.sub{font-size:12.5px;color:var(--bone-dim);margin:0 0 15px;line-height:1.5}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{
+  appearance:none;cursor:pointer;font:inherit;font-size:14px;
+  background:none;border:1px solid var(--line);color:var(--bone-dim);
+  padding:9px 15px;border-radius:2px;
+  transition:background .15s,color .15s,border-color .15s;
+  font-variant-numeric:tabular-nums;
+}
+.chip:hover{border-color:#463f4d;color:var(--bone)}
+.chip[aria-pressed="true"]{background:var(--bone);border-color:var(--bone);color:var(--ink);font-weight:500}
+.chip:focus-visible{outline:2px solid var(--tide);outline-offset:2px}
+
+/* ---------- switch rows ---------- */
+.sw{display:flex;align-items:center;gap:16px;padding:13px 0}
+.sw + .sw{border-top:1px solid var(--line)}
+.sw .name{flex:1;font-size:14.5px}
+.sw .name em{display:block;font-style:normal;font-size:11.5px;color:var(--faint);margin-top:3px;line-height:1.45}
+.sw.indent{padding-left:22px}
+.tgl{
+  appearance:none;border:0;cursor:pointer;flex:0 0 auto;
+  width:44px;height:22px;border-radius:22px;background:#3a3540;position:relative;
+  transition:background .18s;
+}
+.tgl::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;
+  border-radius:50%;background:var(--bone);transition:transform .18s cubic-bezier(.3,1.3,.5,1)}
+.tgl[aria-pressed="true"]{background:var(--tide)}
+.tgl[aria-pressed="true"]::after{transform:translateX(22px);background:var(--ink)}
+.tgl:focus-visible{outline:2px solid var(--tide);outline-offset:3px}
+.tgl:disabled{opacity:.3;cursor:not-allowed}
+
+/* ---------- pace fields ---------- */
+.fields{display:flex;align-items:flex-end;gap:10px;margin-top:16px}
+.fields .f{flex:1}
+.fields label{display:block;font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint);margin-bottom:7px}
+.fields input{
+  width:100%;background:none;border:0;border-bottom:1px solid var(--line);
+  color:var(--bone);font:inherit;font-size:17px;padding:6px 0;
+  font-variant-numeric:tabular-nums;border-radius:0;
+}
+.fields input:focus{outline:none;border-bottom-color:var(--tide)}
+.fields .sep{font-size:12px;color:var(--faint);padding-bottom:11px;font-variant-numeric:tabular-nums}
+
+/* ---------- start ---------- */
+.go{
+  width:100%;appearance:none;border:0;cursor:pointer;font:inherit;
+  background:var(--bone);color:var(--ink);font-size:15px;font-weight:600;
+  letter-spacing:1.4px;text-transform:uppercase;
+  padding:20px 0;border-radius:2px;margin-top:32px;transition:opacity .15s;
+}
+.go:hover{opacity:.87}
+.go:focus-visible{outline:2px solid var(--tide);outline-offset:3px}
+.go.quiet{background:none;border:1px solid var(--line);color:var(--bone-dim);
+  font-weight:400;padding:16px 0;margin-top:10px}
+
+/* ---------- session ---------- */
+.session{
+  position:absolute;inset:0;background:var(--ink);z-index:20;display:none;flex-direction:column;
+}
+.session.on{display:flex}
+.sesstop{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:calc(24px + env(safe-area-inset-top)) 26px 0;
+  font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);
+  position:relative;z-index:3;
+}
+.sesstop .count{font-variant-numeric:tabular-nums}
+.sesstop button{background:none;border:0;color:var(--faint);font:inherit;font-size:11px;
+  letter-spacing:2px;text-transform:uppercase;cursor:pointer;padding:6px 0}
+.sesstop button:hover{color:var(--bone)}
+
+/* the tide: this rectangle IS the lungs. up = filling, down = emptying */
+.stage{flex:1;position:relative;overflow:hidden;display:grid;place-items:center;cursor:default}
+.stage.tappable{cursor:pointer}
+.tide{
+  position:absolute;left:0;right:0;top:0;height:100%;
+  background:linear-gradient(180deg,var(--tide-fill),rgba(127,158,122,.04));
+  border-top:1.5px solid var(--tide);
+  transform:translateY(100%);will-change:transform;
+}
+.readout{position:relative;z-index:2;text-align:center;padding:0 24px}
+.num{font-size:76px;font-weight:300;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-2px}
+.num.clock{font-size:60px;letter-spacing:-1px}
+.word{font-family:var(--serif);font-style:italic;font-weight:400;font-size:25px;
+  margin-top:14px;color:var(--bone);letter-spacing:-.2px}
+.hint{margin-top:10px;font-size:11.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--faint);min-height:16px}
+.rule{height:1px;background:var(--line);position:relative;z-index:3}
+.rule i{position:absolute;inset:0 auto 0 0;width:0;background:var(--bone);display:block}
+.sessfoot{padding:16px 26px calc(20px + env(safe-area-inset-bottom));
+  font-size:11.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--faint);
+  text-align:center;position:relative;z-index:3}
+
+/* ---------- summary ---------- */
+.summary{padding:0 26px calc(26px + env(safe-area-inset-bottom));display:flex;flex-direction:column;height:100%}
+.summary .body{flex:1;overflow-y:auto;padding-top:34px}
+.summary h2{font-family:var(--serif);font-style:italic;font-weight:400;font-size:29px;margin:0 0 4px;letter-spacing:-.4px}
+.summary .lede{color:var(--bone-dim);font-size:13px;margin:0 0 6px}
+.holds{list-style:none;margin:20px 0 0;padding:0}
+.holds li{display:flex;align-items:baseline;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
+.holds .n{font-size:11px;letter-spacing:1.8px;color:var(--faint);font-variant-numeric:tabular-nums}
+.holds .track{flex:1;height:2px;background:var(--line);position:relative}
+.holds .track i{position:absolute;inset:0 auto 0 0;background:var(--tide);display:block}
+.holds .t{font-size:16px;font-variant-numeric:tabular-nums;min-width:56px;text-align:right}
+
+@media (prefers-reduced-motion:reduce){.tide{transition:none}}
+@media (max-width:360px){.num{font-size:62px}.word{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ===================== SETTINGS ===================== -->
+  <div class="masthead">
+    <span class="mark">Tide</span>
+    <span class="tagline">breathing timer</span>
+  </div>
+
+  <div class="scroll" id="settings">
+
+    <div class="caution">
+      <b>Read this once</b>
+      Fast cyclic breathing lowers blood CO₂ and can make you faint with no warning. Sit or lie down before you start. Never do it in or near water, in a bath, while driving, or standing up. Stop if you feel unwell. Get medical clearance first if you are pregnant or have epilepsy, high blood pressure, or a heart condition.
+    </div>
+
+    <div class="block">
+      <p class="kicker">01 · Pace</p>
+      <h2 class="title">How fast each breath runs</h2>
+      <p class="sub">Presets are starting points. Adjust the milliseconds directly to match whatever cadence you are used to.</p>
+      <div class="chips" id="pacePicker" role="group" aria-label="Pace"></div>
+      <div class="fields">
+        <div class="f">
+          <label for="inMs">Inhale</label>
+          <input id="inMs" type="number" min="600" max="8000" step="50" value="2000" inputmode="numeric">
+        </div>
+        <div class="sep" id="cycleEq">3.4 s cycle</div>
+        <div class="f">
+          <label for="outMs">Exhale</label>
+          <input id="outMs" type="number" min="400" max="8000" step="50" value="1400" inputmode="numeric">
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <p class="kicker">02 · Shape</p>
+      <h2 class="title">Rounds, and breaths per round</h2>
+      <p class="sub">Each round is: paced breaths, then an open-ended hold on empty lungs, then a 15 second hold on full lungs.</p>
+      <div class="chips" id="roundsPicker" role="group" aria-label="Rounds" style="margin-bottom:14px"></div>
+      <div class="chips" id="breathsPicker" role="group" aria-label="Breaths per round"></div>
+      <p class="sub" style="margin:16px 0 0">Roughly <b id="estimate">6 min</b>, assuming 75 second holds.</p>
+    </div>
+
+    <div class="block">
+      <p class="kicker">03 · Cues</p>
+      <h2 class="title">What you hear and feel</h2>
+      <div class="sw">
+        <div class="name">Breath sounds<em>Synthesised rising and falling air</em></div>
+        <button class="tgl" id="tglBreath" aria-pressed="true" aria-label="Breath sounds"></button>
+      </div>
+      <div class="sw">
+        <div class="name">Hold chime<em>Marks the start and end of each hold</em></div>
+        <button class="tgl" id="tglPing" aria-pressed="true" aria-label="Hold chime"></button>
+      </div>
+      <div class="sw">
+        <div class="name">Vibration<em id="hapticNote">Android only. iOS browsers do not vibrate.</em></div>
+        <button class="tgl" id="tglHaptic" aria-pressed="true" aria-label="Vibration"></button>
+      </div>
+      <div class="sw indent">
+        <div class="name">Every breath<em>One pulse in, two pulses out</em></div>
+        <button class="tgl" id="tglHapBreath" aria-pressed="true" aria-label="Vibrate on breaths"></button>
+      </div>
+      <div class="sw indent">
+        <div class="name">Phase changes<em>Three pulses</em></div>
+        <button class="tgl" id="tglHapPhase" aria-pressed="true" aria-label="Vibrate on phase changes"></button>
+      </div>
+    </div>
+
+    <button class="go" id="startBtn">Begin</button>
+  </div>
+
+  <!-- ===================== SESSION ===================== -->
+  <div class="session" id="session">
+    <div class="sesstop">
+      <span class="count" id="roundLabel">01 / 03</span>
+      <button id="quitBtn">Stop</button>
+    </div>
+    <div class="stage" id="stage">
+      <div class="tide" id="tide"></div>
+      <div class="readout">
+        <div class="num" id="bigNum">3</div>
+        <div class="word" id="cue">settle in</div>
+        <div class="hint" id="hint">sit or lie down</div>
+      </div>
+    </div>
+    <div class="rule"><i id="progress"></i></div>
+    <div class="sessfoot" id="foot"></div>
+  </div>
+
+  <!-- ===================== SUMMARY ===================== -->
+  <div class="session" id="summaryView">
+    <div class="summary">
+      <div class="body">
+        <h2>Done</h2>
+        <p class="lede">Longest hold <b id="bestHold" style="color:var(--bone)">—</b> · total <b id="totalTime" style="color:var(--bone)">—</b></p>
+        <ul class="holds" id="holdList"></ul>
+      </div>
+      <button class="go" id="againBtn">Run it again</button>
+      <button class="go quiet" id="backBtn">Change settings</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ------------------------------------------------------------------
+   Tide — a paced breathing timer.
+   Pattern: N cyclic breaths, an open-ended hold on empty lungs,
+   then a fixed hold on full lungs. Repeat.
+
+   The pace presets below are round numbers chosen for comfort, not
+   measured from anything. Edit them freely.
+------------------------------------------------------------------- */
+const PACES = {
+  Slow:    { inhale: 2600, exhale: 1800 },
+  Steady:  { inhale: 2000, exhale: 1400 },
+  Brisk:   { inhale: 1400, exhale: 1000 }
+};
+const PREP_MS = 3000;
+const RECOVERY_MS = 15000;
+const ASSUMED_HOLD_MS = 75000;   // only used for the duration estimate
+
+const cfg = {
+  pace: "Steady",
+  inhale: 2000, exhale: 1400,
+  rounds: 3, breaths: 30,
+  sndBreath: true, sndPing: true,
+  haptic: true, hapBreath: true, hapPhase: true
+};
+
+const $ = s => document.querySelector(s);
+const pad2 = n => String(n).padStart(2, "0");
+const fmt = ms => { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + pad2(s % 60); };
+
+/* ---------------- audio: synthesised, nothing loaded ---------------- */
+let actx = null, noiseBuf = null;
+
+function audio(){
+  if (!actx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    actx = new AC();
+    const len = actx.sampleRate * 3;
+    noiseBuf = actx.createBuffer(1, len, actx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) {          // brown noise: softer than white
+      last = (last + 0.035 * (Math.random() * 2 - 1)) / 1.02;
+      d[i] = last * 3.2;
+    }
+  }
+  if (actx.state === "suspended") actx.resume();
+  return actx;
+}
+
+function breathSound(dir, durMs){
+  if (!cfg.sndBreath) return;
+  const c = audio(); if (!c) return;
+  const t = c.currentTime, d = Math.max(0.25, durMs / 1000);
+  const src = c.createBufferSource();
+  src.buffer = noiseBuf; src.loop = true;
+  const bp = c.createBiquadFilter();
+  bp.type = "bandpass"; bp.Q.value = 0.9;
+  const g = c.createGain();
+  if (dir === "in") {
+    bp.frequency.setValueAtTime(320, t);
+    bp.frequency.exponentialRampToValueAtTime(1500, t + d);
+  } else {
+    bp.frequency.setValueAtTime(1300, t);
+    bp.frequency.exponentialRampToValueAtTime(260, t + d);
+  }
+  const peak = dir === "in" ? 0.30 : 0.22;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + d * 0.42);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  src.connect(bp).connect(g).connect(c.destination);
+  src.start(t); src.stop(t + d + 0.08);
+}
+
+function chime(){
+  if (!cfg.sndPing) return;
+  const c = audio(); if (!c) return;
+  const t = c.currentTime;
+  [[528, 0.18], [792, 0.06], [1056, 0.025]].forEach(([f, amp]) => {
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "sine"; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(amp, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
+    o.connect(g).connect(c.destination);
+    o.start(t); o.stop(t + 2.5);
+  });
+}
+
+/* Patterns are distinguishable without looking:
+   in = one long pulse, out = two short, phase = three. */
+const BUZZ = { in: 30, out: [12, 55, 12], phase: [40, 60, 40] };
+function buzz(kind){
+  if (!cfg.haptic || !navigator.vibrate) return;
+  if ((kind === "in" || kind === "out") && !cfg.hapBreath) return;
+  if (kind === "phase" && !cfg.hapPhase) return;
+  navigator.vibrate(BUZZ[kind]);
+}
+
+/* ---------------- settings ---------------- */
+function chipRow(el, values, key, label){
+  el.innerHTML = "";
+  values.forEach(v => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip";
+    b.textContent = label ? label(v) : v;
+    b.setAttribute("aria-pressed", cfg[key] === v);
+    b.onclick = () => {
+      cfg[key] = v;
+      [...el.children].forEach(c => c.setAttribute("aria-pressed", c === b));
+      if (key === "pace") {
+        cfg.inhale = PACES[v].inhale; cfg.exhale = PACES[v].exhale;
+        $("#inMs").value = cfg.inhale; $("#outMs").value = cfg.exhale;
+      }
+      refreshEstimate();
+    };
+    el.appendChild(b);
+  });
+}
+chipRow($("#pacePicker"), Object.keys(PACES), "pace");
+chipRow($("#roundsPicker"), [1,2,3,4,5,6,7,8,9,10], "rounds", v => v + (v === 1 ? " round" : " rounds"));
+chipRow($("#breathsPicker"), [20,25,30,35,40,45,50,55,60], "breaths", v => v + " breaths");
+
+function readFields(){
+  cfg.inhale = Math.min(8000, Math.max(600, +$("#inMs").value || 2000));
+  cfg.exhale = Math.min(8000, Math.max(400, +$("#outMs").value || 1400));
+  refreshEstimate();
+}
+$("#inMs").addEventListener("input", readFields);
+$("#outMs").addEventListener("input", readFields);
+
+function bindToggle(sel, key, after){
+  const el = $(sel);
+  el.onclick = () => {
+    cfg[key] = el.getAttribute("aria-pressed") !== "true";
+    el.setAttribute("aria-pressed", cfg[key]);
+    if (after) after();
+  };
+}
+bindToggle("#tglBreath", "sndBreath");
+bindToggle("#tglPing", "sndPing");
+bindToggle("#tglHapBreath", "hapBreath");
+bindToggle("#tglHapPhase", "hapPhase");
+bindToggle("#tglHaptic", "haptic", () => {
+  $("#tglHapBreath").disabled = !cfg.haptic;
+  $("#tglHapPhase").disabled = !cfg.haptic;
+});
+
+if (!navigator.vibrate) {
+  cfg.haptic = false;
+  ["#tglHaptic", "#tglHapBreath", "#tglHapPhase"].forEach(s => { $(s).disabled = true; });
+  $("#tglHaptic").setAttribute("aria-pressed", "false");
+  $("#hapticNote").textContent = "This browser cannot vibrate.";
+}
+
+function refreshEstimate(){
+  const cycle = cfg.inhale + cfg.exhale;
+  $("#cycleEq").textContent = (cycle / 1000).toFixed(1) + " s cycle";
+  const per = cycle * cfg.breaths + ASSUMED_HOLD_MS + RECOVERY_MS;
+  $("#estimate").textContent = Math.round((PREP_MS + per * cfg.rounds) / 60000) + " min";
+}
+refreshEstimate();
+
+/* ---------------- engine ---------------- */
+const S = { phase: "idle", round: 1, phaseStart: 0, lastSeg: "", holds: [], raf: 0, wake: null, t0: 0 };
+
+const tide = $("#tide"), bigNum = $("#bigNum"), cue = $("#cue"), hint = $("#hint"),
+      progress = $("#progress"), roundLabel = $("#roundLabel"), stage = $("#stage"), foot = $("#foot");
+
+const ease = p => p < 0.5 ? 2*p*p : 1 - Math.pow(-2*p + 2, 2) / 2;
+
+/* level 0 = lungs empty (tide at the floor), 1 = lungs full (tide at the top) */
+function setLevel(v){ tide.style.transform = `translateY(${((1 - v) * 100).toFixed(3)}%)`; }
+
+function setPhase(name){ S.phase = name; S.phaseStart = performance.now(); S.lastSeg = ""; }
+
+async function start(){
+  audio();
+  S.round = 1; S.holds = []; S.t0 = performance.now();
+  $("#session").classList.add("on");
+  $("#summaryView").classList.remove("on");
+  roundLabel.textContent = `01 / ${pad2(cfg.rounds)}`;
+  stage.classList.remove("tappable");
+  foot.textContent = "";
+  setPhase("prep");
+  S.raf = requestAnimationFrame(tick);
+  try { S.wake = await navigator.wakeLock.request("screen"); } catch(_){}
+}
+
+function stop(showSummary){
+  cancelAnimationFrame(S.raf);
+  S.phase = "idle";
+  if (S.wake) { S.wake.release().catch(()=>{}); S.wake = null; }
+  $("#session").classList.remove("on");
+  if (showSummary) renderSummary();
+}
+
+function tick(now){
+  const el = now - S.phaseStart;
+
+  if (S.phase === "prep") {
+    bigNum.textContent = Math.max(1, Math.ceil((PREP_MS - el) / 1000));
+    bigNum.classList.remove("clock");
+    cue.textContent = "settle in";
+    hint.textContent = "sit or lie down";
+    setLevel(0.06);
+    progress.style.width = Math.min(100, el / PREP_MS * 100) + "%";
+    if (el >= PREP_MS) { buzz("phase"); setPhase("breathing"); }
+  }
+
+  else if (S.phase === "breathing") {
+    const cycle = cfg.inhale + cfg.exhale;
+    const idx = Math.floor(el / cycle);
+
+    if (idx >= cfg.breaths) {
+      chime(); buzz("phase");
+      setPhase("retention");
+      stage.classList.add("tappable");
+      return again();
+    }
+
+    const pos = el % cycle;
+    const inhaling = pos < cfg.inhale;
+    const e = ease(Math.min(1, inhaling ? pos / cfg.inhale : (pos - cfg.inhale) / cfg.exhale));
+    setLevel(inhaling ? e : 1 - e);
+
+    const seg = idx + (inhaling ? "i" : "o");
+    if (seg !== S.lastSeg) {
+      S.lastSeg = seg;
+      breathSound(inhaling ? "in" : "out", inhaling ? cfg.inhale : cfg.exhale);
+      buzz(inhaling ? "in" : "out");
+    }
+
+    bigNum.textContent = idx + 1;
+    bigNum.classList.remove("clock");
+    cue.textContent = inhaling ? "breathe in" : "let it fall";
+    hint.textContent = (cfg.breaths - idx - 1) + " to go";
+    progress.style.width = (el / (cycle * cfg.breaths) * 100) + "%";
+  }
+
+  else if (S.phase === "retention") {
+    bigNum.textContent = fmt(el);
+    bigNum.classList.add("clock");
+    cue.textContent = "hold, empty";
+    hint.textContent = "tap when you need air";
+    setLevel(0.04);
+    progress.style.width = "100%";
+  }
+
+  else if (S.phase === "recovery") {
+    bigNum.textContent = Math.ceil((RECOVERY_MS - el) / 1000);
+    bigNum.classList.remove("clock");
+    cue.textContent = "hold, full";
+    hint.textContent = "big breath in, keep it";
+    setLevel(1);
+    progress.style.width = (100 - el / RECOVERY_MS * 100) + "%";
+    if (el >= RECOVERY_MS) {
+      buzz("phase");
+      if (S.round >= cfg.rounds) { chime(); return stop(true); }
+      S.round++;
+      roundLabel.textContent = `${pad2(S.round)} / ${pad2(cfg.rounds)}`;
+      setPhase("breathing");
+    }
+  }
+
+  return again();
+  function again(){ S.raf = requestAnimationFrame(tick); }
+}
+
+function endHold(){
+  if (S.phase !== "retention") return;
+  S.holds.push(performance.now() - S.phaseStart);
+  chime(); buzz("phase");
+  stage.classList.remove("tappable");
+  setPhase("recovery");
+}
+
+stage.addEventListener("click", endHold);
+document.addEventListener("keydown", e => {
+  if (e.code === "Space" && S.phase === "retention") { e.preventDefault(); endHold(); }
+  if (e.code === "Escape" && S.phase !== "idle") stop(S.holds.length > 0);
+});
+
+/* ---------------- summary ---------------- */
+function renderSummary(){
+  const list = $("#holdList");
+  const best = S.holds.length ? Math.max(...S.holds) : 0;
+  list.innerHTML = "";
+  S.holds.forEach((ms, i) => {
+    const li = document.createElement("li");
+    li.innerHTML =
+      `<span class="n">${pad2(i + 1)}</span>` +
+      `<span class="track"><i style="width:${best ? (ms / best * 100) : 0}%"></i></span>` +
+      `<span class="t">${fmt(ms)}</span>`;
+    list.appendChild(li);
+  });
+  $("#bestHold").textContent = best ? fmt(best) : "—";
+  $("#totalTime").textContent = fmt(performance.now() - S.t0);
+  $("#summaryView").classList.add("on");
+}
+
+$("#startBtn").onclick = start;
+$("#quitBtn").onclick  = () => stop(S.holds.length > 0);
+$("#againBtn").onclick = () => { $("#summaryView").classList.remove("on"); start(); };
+$("#backBtn").onclick  = () => $("#summaryView").classList.remove("on");
+
+})();
+</script>
+</body>
+</html>
