@@ -1,3 +1,19 @@
+# Exported logs from Trajectory contain personal health data. Never commit them.
+# Duplicated from trajectory/.gitignore deliberately: nested ignore files only
+# apply within their own directory, and an export saved anywhere else in the
+# tree would otherwise be staged.
+trajectory-*.json
+*.export.json
+data/
+private/
+
+# Editor and OS noise
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
 *~
+
+# Local tooling, never part of an app
 .claude/

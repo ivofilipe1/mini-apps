@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trajectory</title>
+
+<!-- No external scripts, styles, or fonts. The chart is drawn as inline SVG, so
+     the page works offline and inside sandboxed webviews that block CDNs.
+
+     The policy below blocks the two things that would matter if markup ever did
+     get injected: loading remote code, and sending your log anywhere.
+     connect-src 'none' kills fetch, XHR and sendBeacon outright.
+     'unsafe-inline' is required because the script and styles are inline in this
+     single file; it still blocks every external origin. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+
+<style>
+/* ============================================================================
+   TOKENS
+   Colour is semantic and used nowhere decoratively: each hue is one data role.
+   Type is a system stack — no webfont CDN, so no third-party request.
+   ========================================================================== */
+:root{
+  --bg:#0C0F14;
+  --sunk:#11151C;
+  --panel:#161C25;
+  --line:#222A36;
+  --line2:#313D4D;
+
+  --text:#E6EAF0;
+  --muted:#8A97A8;
+  --faint:#5C6878;
+
+  --raw:#6E829B;      /* raw scale reading        */
+  --trend:#E8B14A;    /* smoothed trend           */
+  --proj:#4FD1C5;     /* forward projection       */
+  --target:#C0605B;   /* target reference         */
+  --good:#6FCF97;
+
+  --r:3px;
+  --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--sans);font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:18px 14px 64px;}
+
+/* Structural device: every panel names the channel you are looking at. */
+.eyebrow{
+  font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;margin:0 0 8px;
+}
+.mono{font-family:var(--mono);}
+
+/* ---------- masthead ---------- */
+.masthead{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:16px;
+}
+.masthead h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.02em;}
+
+/* ---------- panels ---------- */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:12px;}
+
+/* ---------- zone 1: the answer ---------- */
+.answer{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;}
+.answer .big{font-size:56px;font-weight:600;letter-spacing:-.04em;line-height:.92;color:var(--trend);font-family:var(--mono);}
+.answer .unit{font-size:16px;color:var(--muted);padding-bottom:6px;}
+.answer .rate{
+  font-size:15px;font-family:var(--mono);padding-bottom:7px;margin-left:6px;
+  color:var(--good);
+}
+.answer .rate.up{color:var(--target);}
+.answer .rate.flat{color:var(--muted);}
+.sentence{margin:14px 0 0;font-size:14.5px;color:var(--muted);max-width:60ch;}
+.sentence b{color:var(--text);font-weight:600;}
+.sentence .date{color:var(--proj);font-weight:600;font-family:var(--mono);}
+
+/* ---------- log row ---------- */
+.logrow{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  margin-top:16px;padding-top:16px;border-top:1px solid var(--line);
+}
+.field{display:flex;flex-direction:column;gap:4px;}
+label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600;}
+input,select{
+  background:var(--sunk);border:1px solid var(--line);color:var(--text);
+  border-radius:var(--r);padding:9px;font:inherit;font-size:14px;font-family:var(--mono);
+  width:100%;min-height:40px;
+}
+input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{
+  outline:2px solid var(--proj);outline-offset:2px;
+}
+input[type=range]{padding:0;accent-color:var(--trend);min-height:0;}
+
+button{
+  font:inherit;font-size:13.5px;font-weight:550;
+  background:var(--sunk);color:var(--text);border:1px solid var(--line2);
+  border-radius:var(--r);padding:9px 14px;cursor:pointer;min-height:40px;
+  transition:background .12s,border-color .12s,color .12s;
+}
+button:hover{background:var(--line);}
+button.primary{background:var(--trend);color:#20180A;border-color:var(--trend);font-weight:650;}
+button.primary:hover{background:#F2C25E;}
+button.ghost{background:transparent;border-color:var(--line);color:var(--muted);}
+button.ghost:hover{color:var(--text);border-color:var(--line2);}
+button.mini{padding:4px 9px;min-height:0;font-size:11.5px;}
+button.danger:hover{border-color:var(--target);color:var(--target);}
+
+/* ---------- zone 2: chart ---------- */
+.chart-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px;}
+/* scrub readout replaces the +30/+60/+90 cards: continuous, not three samples */
+.scrub{font-family:var(--mono);font-size:13.5px;color:var(--muted);white-space:nowrap;}
+.scrub b{color:var(--text);font-weight:600;}
+.chart-box{position:relative;height:300px;touch-action:pan-y;}
+.chart-box svg{display:block;width:100%;height:100%;}
+.chart-box text{font-family:var(--mono);}
+.chart-foot{
+  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin-top:12px;padding-top:12px;border-top:1px solid var(--line);
+}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;}
+.seg button{
+  border:0;border-radius:0;background:transparent;color:var(--muted);
+  padding:6px 11px;min-height:0;font-size:12px;font-weight:550;
+}
+.seg button + button{border-left:1px solid var(--line);}
+.seg button[aria-pressed="true"]{background:var(--line);color:var(--text);}
+.seg-wrap{display:flex;align-items:center;gap:9px;}
+.seg-wrap .lab{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600;}
+
+/* ---------- zone 3: three cards, no more ---------- */
+.cards{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:12px;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 15px;}
+.card .v{font-size:24px;font-weight:600;letter-spacing:-.02em;font-family:var(--mono);line-height:1.15;}
+.card .v small{font-size:12px;color:var(--muted);font-weight:400;margin-left:4px;}
+.card .n{font-size:12px;color:var(--muted);margin-top:4px;}
+.card.t1{border-left:2px solid var(--target);}
+.card.t2{border-left:2px solid #8C4B4B;}
+.card.bal{border-left:2px solid var(--proj);}
+
+/* ---------- disclosure sections ---------- */
+details{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);margin-bottom:12px;}
+summary{
+  cursor:pointer;list-style:none;padding:13px 16px;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:600;
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+}
+summary::-webkit-details-marker{display:none;}
+summary::after{content:"+";font-size:15px;letter-spacing:0;color:var(--faint);}
+details[open] summary::after{content:"–";}
+details[open] summary{border-bottom:1px solid var(--line);color:var(--muted);}
+.details-body{padding:14px 16px 16px;}
+
+/* ---------- table ---------- */
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+table{width:100%;border-collapse:collapse;font-size:13.5px;}
+th{text-align:right;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);
+   font-weight:600;padding:0 9px 8px;border-bottom:1px solid var(--line);white-space:nowrap;}
+th:first-child,td:first-child{text-align:left;}
+th:last-child,td:last-child{text-align:right;}
+td{padding:7px 9px;border-bottom:1px solid var(--sunk);font-family:var(--mono);white-space:nowrap;}
+tbody tr:hover{background:var(--sunk);}
+td.dim{color:var(--faint);}
+td input{padding:4px 6px;min-height:0;font-size:13px;}
+.over{color:var(--target);} .under{color:var(--good);}
+
+/* ---------- model readout ---------- */
+.kv{display:grid;grid-template-columns:1fr auto;gap:7px 14px;font-size:13px;}
+.kv dt{color:var(--muted);}
+.kv dd{margin:0;font-family:var(--mono);text-align:right;}
+.kv dd.warn{color:var(--trend);}
+
+/* ---------- dialog ---------- */
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:var(--r);
+       padding:0;max-width:520px;width:calc(100% - 24px);}
+dialog::backdrop{background:rgba(6,8,11,.75);}
+.dlg-head{padding:15px 16px;border-bottom:1px solid var(--line);}
+.dlg-head h2{margin:0;font-size:16px;font-weight:600;}
+.dlg-body{padding:4px 16px 16px;max-height:66vh;overflow-y:auto;}
+.dlg-foot{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;}
+.dlg-sect{padding-top:16px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.grid2 .full{grid-column:1/-1;}
+
+.hint{font-size:11.5px;color:var(--faint);line-height:1.45;}
+.notice{border:1px solid var(--line2);border-left:2px solid var(--trend);background:var(--sunk);
+        border-radius:var(--r);padding:10px 12px;font-size:12.5px;color:var(--muted);margin-bottom:12px;}
+.notice b{color:var(--text);}
+.empty{color:var(--muted);font-size:13.5px;padding:20px 4px;text-align:center;}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(10px);
+  background:var(--line);border:1px solid var(--line2);color:var(--text);padding:9px 15px;
+  border-radius:var(--r);font-size:13px;opacity:0;pointer-events:none;
+  transition:opacity .18s,transform .18s;z-index:99;max-width:88vw;text-align:center;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+@media (min-width:620px){
+  .logrow{grid-template-columns:auto 1fr 1fr auto;align-items:end;}
+  .cards{grid-template-columns:repeat(3,1fr);}
+}
+@media (min-width:900px){
+  .wrap{padding:26px 22px 72px;}
+  .chart-box{height:360px;}
+  .answer .big{font-size:66px;}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <h1>Trajectory</h1>
+    <button id="btn-settings" class="ghost">Settings</button>
+  </header>
+
+  <div id="storage-warning" class="notice" hidden>
+    <b>Storage unavailable.</b> This browser blocked local storage, so entries last only until you
+    close the tab. Export from Settings before you leave.
+  </div>
+
+  <!-- ============ ZONE 1 — the answer, and today's log ============ -->
+  <section class="panel">
+    <p class="eyebrow">Trend weight</p>
+    <div class="answer">
+      <span class="big" id="a-trend">—</span>
+      <span class="unit">kg</span>
+      <span class="rate" id="a-rate"></span>
+    </div>
+    <p class="sentence" id="a-sentence">Log a weigh-in to start the trend.</p>
+
+    <div class="logrow">
+      <div class="field">
+        <label for="in-date">Date</label>
+        <input type="date" id="in-date">
+      </div>
+      <div class="field">
+        <label for="in-weight">Weight kg</label>
+        <input type="number" id="in-weight" step="0.1" min="25" max="400" inputmode="decimal" placeholder="72.4">
+      </div>
+      <div class="field">
+        <label for="in-cal">Intake kcal</label>
+        <input type="number" id="in-cal" step="10" min="0" max="12000" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button class="primary" id="btn-save">Save</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ZONE 2 — the chart is the dashboard ============ -->
+  <section class="panel">
+    <div class="chart-head">
+      <p class="eyebrow" style="margin:0">Weight over time</p>
+      <div class="scrub" id="scrub"></div>
+    </div>
+    <div class="chart-box" id="plot"></div>
+    <div class="chart-foot">
+      <div class="seg-wrap">
+        <span class="lab">Show</span>
+        <div class="seg" id="seg-range" role="group" aria-label="Projection horizon">
+          <button data-v="90">90 days</button>
+          <button data-v="180">6 months</button>
+          <button data-v="auto">To target</button>
+        </div>
+      </div>
+      <div class="seg-wrap">
+        <span class="lab">Smoothing</span>
+        <div class="seg" id="seg-alpha" role="group" aria-label="Trend smoothing">
+          <button data-v="0.1">Slow</button>
+          <button data-v="0.2">Normal</button>
+          <button data-v="0.35">Fast</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ZONE 3 — three cards, nothing else ============ -->
+  <section class="cards" id="cards"></section>
+
+  <!-- ============ collapsed detail ============ -->
+  <details id="det-log">
+    <summary><span>Log · <span id="entry-count">0</span> entries</span></summary>
+    <div class="details-body">
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Date</th><th>Scale</th><th>Trend</th><th>Intake</th><th>Δ goal</th><th></th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="table-empty" hidden>Nothing logged yet.</div>
+    </div>
+  </details>
+
+  <details id="det-model">
+    <summary><span>How the projection is calculated</span></summary>
+    <div class="details-body">
+      <dl class="kv" id="model-kv"></dl>
+      <p class="hint" style="margin:14px 0 0">
+        Burn is fitted by weighted least squares on the energy-balance identity across the window,
+        not by differencing its two endpoints, so a single water-weight day nudges the answer instead
+        of swinging it. The fit is blended against the Mifflin-St Jeor estimate by confidence, which
+        rises with window span, weigh-in count and intake coverage. Inside the projection, burn is
+        recalculated from the simulated weight every day, so it falls as you lose and the curve
+        flattens. Energy converts at 7,700 kcal per kg, which assumes fat: early loss is largely
+        water, so the fitted burn reads high in the first weeks and settles as data accumulates.
+        The fit also inherits any bias in your food logging, since it cannot distinguish
+        under-reported intake from a slower metabolism.
+      </p>
+    </div>
+  </details>
+</div>
+
+<!-- ============ SETTINGS: one place for every parameter ============ -->
+<dialog id="dlg">
+  <div class="dlg-head">
+    <h2 id="dlg-title">Settings</h2>
+    <p class="hint" id="dlg-intro" hidden style="margin:6px 0 0">
+      These are placeholders. Set them once and the projection has something real to
+      work from. You can change any of it later.
+    </p>
+  </div>
+  <div class="dlg-body">
+
+    <div class="dlg-sect">
+      <p class="eyebrow">You</p>
+      <div class="grid2">
+        <div class="field"><label for="p-sex">Sex</label>
+          <select id="p-sex"><option value="male">Male</option><option value="female">Female</option></select></div>
+        <div class="field"><label for="p-age">Age</label><input type="number" id="p-age" min="10" max="110"></div>
+        <div class="field"><label for="p-height">Height cm</label><input type="number" id="p-height" min="100" max="230"></div>
+        <div class="field"><label for="p-start">Start kg</label><input type="number" id="p-start" step="0.1"></div>
+        <div class="field full"><label for="p-af">Activity</label>
+          <select id="p-af">
+            <option value="1.2">1.200 — sedentary</option>
+            <option value="1.375">1.375 — 3×/week + desk job</option>
+            <option value="1.55">1.550 — 4–5×/week</option>
+            <option value="1.725">1.725 — 6–7×/week</option>
+            <option value="1.9">1.900 — very heavy / physical job</option>
+          </select></div>
+      </div>
+    </div>
+
+    <div class="dlg-sect">
+      <p class="eyebrow">Targets</p>
+      <div class="grid2">
+        <div class="field"><label for="p-t1">Target 1 kg</label><input type="number" id="p-t1" step="0.1"></div>
+        <div class="field"><label for="p-t2">Target 2 kg</label><input type="number" id="p-t2" step="0.1"></div>
+        <div class="field full"><label for="p-cal">Daily intake goal kcal</label><input type="number" id="p-cal" step="10"></div>
+      </div>
+      <p class="hint" id="p-bmi" style="margin-top:9px"></p>
+    </div>
+
+    <div class="dlg-sect">
+      <p class="eyebrow">Projection</p>
+      <div class="grid2">
+        <div class="field full"><label for="p-source">Assume I eat</label>
+          <select id="p-source">
+            <option value="goal">My intake goal</option>
+            <option value="avg7">My last 7 logged days</option>
+            <option value="custom">A fixed amount</option>
+          </select></div>
+        <div class="field full" id="wrap-custom" hidden>
+          <label for="p-custom">Fixed intake kcal</label><input type="number" id="p-custom" step="10">
+        </div>
+        <div class="field full"><label for="p-burn">Burn estimate</label>
+          <select id="p-burn">
+            <option value="adaptive">Adaptive: learn from my logs</option>
+            <option value="formula">Mifflin-St Jeor × activity</option>
+          </select></div>
+        <div class="field full">
+          <label for="p-alpha">Smoothing α · <span class="mono" id="p-alpha-v"></span></label>
+          <input type="range" id="p-alpha" min="0.1" max="0.5" step="0.01">
+          <span class="hint" id="p-alpha-hint"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="dlg-sect">
+      <p class="eyebrow">Data</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="ghost mini" id="btn-export">Export JSON</button>
+        <button class="ghost mini" id="btn-import">Import JSON</button>
+        <button class="ghost mini" id="btn-sample">Load sample</button>
+        <button class="ghost mini danger" id="btn-clear">Delete everything</button>
+      </div>
+      <input type="file" id="file-import" accept="application/json,.json" hidden>
+      <p class="hint" style="margin-top:9px">
+        Everything stays in this browser. Nothing is uploaded and no tracking script is loaded.
+      </p>
+    </div>
+  </div>
+  <div class="dlg-foot">
+    <button class="ghost" id="p-cancel">Cancel</button>
+    <button class="primary" id="p-save">Save settings</button>
+  </div>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ============================================================================
+   0 — Constants and date helpers
+   Dates are 'YYYY-MM-DD' strings converted through UTC midnight, so a DST
+   shift can never move an entry across a day boundary.
+   ========================================================================== */
+const KCAL_PER_KG = 7700;
+const SEARCH_DAYS = 1095;    // how far ahead the target-date search looks
+const MIN_SAFE_KG = 35;      // simulation floor, prevents runaway curves
+
+const $ = (id) => document.getElementById(id);
+const clamp = (n,lo,hi) => Math.min(hi, Math.max(lo,n));
+const mean  = (a) => a.reduce((x,y)=>x+y,0)/a.length;
+
+function parseDate(s){ const [y,m,d]=s.split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); }
+function fmtDate(dt){ return dt.toISOString().slice(0,10); }
+function addDays(s,n){ const dt=parseDate(s); dt.setUTCDate(dt.getUTCDate()+n); return fmtDate(dt); }
+function diffDays(a,b){ return Math.round((parseDate(b)-parseDate(a))/86400000); }
+function todayStr(){ const n=new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; }
+const MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function shortDate(s){ const d=parseDate(s); return `${d.getUTCDate()} ${MO[d.getUTCMonth()]}`; }
+function longDate(s){ const d=parseDate(s); return `${d.getUTCDate()} ${MO[d.getUTCMonth()]} ${d.getUTCFullYear()}`; }
+
+const f1 = (n) => n==null ? '—' : n.toFixed(1);
+const f0 = (n) => n==null ? '—' : Math.round(n).toLocaleString('en-GB');
+const signed = (n,dp=2) => n==null ? '—' : (n>0?'+':'') + n.toFixed(dp);
+
+/* ============================================================================
+   1 — Storage
+   localStorage as requested, behind a probe. If the browser blocks it the app
+   degrades to in-memory and says so, rather than throwing on every write.
+   ========================================================================== */
+const Store = (() => {
+  const KEY='trajectory.v1'; let usable=true, memory=null;
+  try { localStorage.setItem(KEY+'.probe','1'); localStorage.removeItem(KEY+'.probe'); }
+  catch(e){ usable=false; }
+  return {
+    available:()=>usable,
+    load(){ if(!usable) return memory;
+      try { const r=localStorage.getItem(KEY); return r?JSON.parse(r):null; } catch(e){ return null; } },
+    save(o){ if(!usable){ memory=o; return; }
+      try { localStorage.setItem(KEY, JSON.stringify(o)); }
+      catch(e){ usable=false; memory=o; $('storage-warning').hidden=false; } },
+  };
+})();
+
+/* ============================================================================
+   2 — Defaults and sample series
+   ========================================================================== */
+/* Placeholder values only. Round numbers so it is obvious they are not yours;
+   the setup dialog opens on first run to replace them. */
+const DEFAULT_PROFILE = {
+  sex:'male', age:35, heightCm:175, startWeight:80.0,
+  activityFactor:1.375, target1:75.0, target2:72.5, calorieGoal:2000
+};
+const DEFAULT_SETTINGS = {
+  alpha:0.2, projSource:'goal', customIntake:2000,
+  burnMode:'adaptive', tdeeWindow:28, range:'90'
+};
+
+/* Demo series, 15 days anchored to today: day −14 = 80.0 kg, day 0 = 79.0 kg,
+   with realistic water-weight noise so the trend line has something to smooth
+   and the burn regression has something to fit. Loaded only on request. */
+const SAMPLE = [
+  [-14,80.0,2030],[-13,79.9,1940],[-12,80.2,2150],[-11,79.7,1970],[-10,79.6,1900],
+  [ -9,79.8,2300],[ -8,79.4,2060],[ -7,79.5,1950],[ -6,79.3,1995],[ -5,79.4,1870],
+  [ -4,79.1,2080],[ -3,79.3,2010],[ -2,79.0,1940],[ -1,79.1,2150],[  0,79.0,2000]
+];
+const buildSample = () => { const t=todayStr();
+  return SAMPLE.map(([o,w,c]) => ({date:addDays(t,o), weight:w, calories:c})); };
+
+/* ============================================================================
+   3 — Model (pure: no DOM, no storage)
+   ========================================================================== */
+const Model = {
+  /* Mifflin-St Jeor resting metabolic rate. */
+  bmr(kg,cm,age,sex){ return 10*kg + 6.25*cm - 5*age + (sex==='female' ? -161 : 5); },
+
+  /* Gap-aware, bias-corrected EWMA.
+     α is the weight given to one *day*, so a reading decays by (1−α) per day
+     of gap rather than per logged entry: two weigh-ins 14 days apart leave the
+     older one at 0.8^14 ≈ 4% influence, not 80%.
+     The running numerator/denominator pair normalises by the weight actually
+     accumulated, so the first entries are not anchored to the seed value.
+     With one entry the trend equals that entry; with daily logging it reduces
+     exactly to EWMA_t = α·W_t + (1−α)·EWMA_(t−1). */
+  withEwma(entries, alpha){
+    const lambda = 1 - alpha;          // fraction of yesterday's trend retained
+    let num=0, den=0, prevDate=null;
+    return entries.map(e => {
+      if (e.weight==null) return {...e, ewma:null};
+      const decay = prevDate ? Math.pow(lambda, Math.max(1, diffDays(prevDate, e.date))) : 0;
+      num = num*decay + e.weight;
+      den = den*decay + 1;
+      prevDate = e.date;
+      return {...e, ewma: num/den};
+    });
+  },
+
+  /* Adaptive burn estimate by weighted least squares on the energy-balance
+     identity, rather than differencing the two endpoints of a window.
+
+       body energy store   E_t = ρ·W_t             (ρ = 7,700 kcal/kg)
+       energy balance      E_t = E_0 + C_t − TDEE·t  (C_t = cumulative intake)
+       therefore           z_t = ρ·W_t − C_t = E_0 − TDEE·t
+
+     W_t is the *raw* scale reading, not the smoothed trend. Least squares over
+     many points already does the smoothing, whereas the EWMA lags behind real
+     change and would shrink the observed drop across the window, biasing burn
+     roughly 60 kcal low at a half-kilo per week.
+
+     Regressing z on t gives TDEE as the negative slope and E_0 as the
+     intercept. Every weigh-in in the window contributes, so one water-weight
+     day shifts the answer slightly instead of swinging it by hundreds of kcal
+     the way an endpoint difference does. Observations are weighted by an
+     exponential decay on age, so recent days dominate without a hard cutoff.
+
+     Returns a confidence in [0,1] driven by window span, number of weigh-ins,
+     and how many days actually have intake logged. The caller blends the
+     result against the formula estimate by that confidence, which is what
+     makes the projection slope move on every new log instead of flipping
+     between two fixed models. */
+  estimateTDEE(rows, opts){
+    const windowDays = (opts && opts.windowDays) || 28;
+    const halfLife   = (opts && opts.halfLife)   || 14;
+
+    const weighed = rows.filter(r=>r.ewma!=null);
+    if(weighed.length<2) return {ok:false, reason:'Needs 2 or more weigh-ins.'};
+
+    const lastDate = weighed[weighed.length-1].date;
+    const win = weighed.filter(r=>r.date >= addDays(lastDate,-(windowDays-1)));
+    if(win.length<2) return {ok:false, reason:`Only one weigh-in in the last ${windowDays} days.`};
+
+    const first = win[0];
+    const span  = diffDays(first.date, lastDate);
+    if(span<5) return {ok:false, reason:`Weigh-ins span ${span} day(s); needs 5 or more.`};
+
+    const cals = rows.filter(r=>r.calories!=null && r.date>=first.date && r.date<=lastDate);
+    if(!cals.length) return {ok:false, reason:'No intake logged in this window.'};
+    const avgIntake = mean(cals.map(r=>r.calories));
+    const byDate    = Object.fromEntries(cals.map(r=>[r.date,r.calories]));
+    const coverage  = cals.length/(span+1);
+
+    // Walk the window day by day, imputing unlogged intake with the window mean.
+    const weightBy = Object.fromEntries(win.map(r=>[r.date,r.weight]));
+    const pts=[]; let cum=0;
+    for(let d=0; d<=span; d++){
+      const date=addDays(first.date,d);
+      if(d>0) cum += (byDate[date]!==undefined ? byDate[date] : avgIntake);
+      if(weightBy[date]!==undefined) pts.push({t:d, z:KCAL_PER_KG*weightBy[date]-cum, w:Math.pow(0.5,(span-d)/halfLife)});
+    }
+    if(pts.length<2) return {ok:false, reason:'Not enough weigh-ins in this window.'};
+
+    // weighted OLS
+    let sw=0,swt=0,swz=0,swtt=0,swtz=0;
+    for(const p of pts){ sw+=p.w; swt+=p.w*p.t; swz+=p.w*p.z; swtt+=p.w*p.t*p.t; swtz+=p.w*p.t*p.z; }
+    const den = sw*swtt - swt*swt;
+    if(Math.abs(den)<1e-9) return {ok:false, reason:'Weigh-ins are too clustered in time.'};
+    const slope     = (sw*swtz - swt*swz)/den;
+    const intercept = (swz - slope*swt)/sw;
+    const tdee      = -slope;
+
+    // standard error of the slope, undefined with only two points
+    let se=null;
+    if(pts.length>2){
+      let ss=0; for(const p of pts){ const r=p.z-(intercept+slope*p.t); ss+=p.w*r*r; }
+      const s2 = (ss/sw)*(pts.length/(pts.length-2));
+      se = Math.sqrt(Math.abs(s2*sw/den));
+    }
+
+    // confidence ramps with span, weigh-in count, and intake coverage
+    const spanF = clamp(span/21,0,1);
+    const ptsF  = clamp((pts.length-1)/6,0,1);
+    const confidence = clamp(Math.min(spanF,ptsF)*(0.5+0.5*coverage),0,1);
+
+    return { ok:true, tdee, se, confidence, coverage, avgIntake,
+             days:span, points:pts.length,
+             dTrend: win[win.length-1].ewma - first.ewma,
+             ratePerWeek: ((avgIntake-tdee)/KCAL_PER_KG)*7 };
+  },
+
+  avgIntake(rows,n){
+    const c=rows.filter(r=>r.calories!=null);
+    if(!c.length) return null;
+    const cutoff=addDays(c[c.length-1].date,-(n-1));
+    const win=c.filter(r=>r.date>=cutoff);
+    return win.length ? mean(win.map(r=>r.calories)) : null;
+  },
+
+  /* Day-by-day simulation. BMR is recomputed from the simulated weight each
+     day, so resting burn drops 10 kcal per kg lost and the curve flattens. */
+  project({startWeight, profile, intake, calibration, days}){
+    const out=[]; let w=startWeight;
+    for(let d=1; d<=days; d++){
+      const burn = this.bmr(w,profile.heightCm,profile.age,profile.sex)*profile.activityFactor*calibration;
+      w -= (burn-intake)/KCAL_PER_KG;
+      if (w<MIN_SAFE_KG){ w=MIN_SAFE_KG; out.push({day:d,weight:w,burn}); break; }
+      out.push({day:d,weight:w,burn});
+    }
+    return out;
+  },
+
+  /* First day at or below target, searched past the visible horizon.
+     Returns unreachable once burn converges on intake above the target. */
+  dateForTarget({startWeight, profile, intake, calibration, target, fromDate}){
+    if (startWeight<=target) return {day:0, date:fromDate, already:true};
+    const sim=this.project({startWeight,profile,intake,calibration,days:SEARCH_DAYS});
+    for(const p of sim) if (p.weight<=target) return {day:p.day, date:addDays(fromDate,p.day)};
+    return {unreachable:true, plateau: sim.length ? sim[sim.length-1].weight : startWeight};
+  },
+
+  bmi(kg,cm){ return kg/Math.pow(cm/100,2); }
+};
+
+/* ============================================================================
+   4 — State
+   ========================================================================== */
+let state = { profile:{...DEFAULT_PROFILE}, settings:{...DEFAULT_SETTINGS}, entries:[] };
+let editingDate = null;
+let scrubIndex  = null;   // scrub position on the plot, drives the readout above it
+let view  = null;         // last computed view model, shared with the plot renderer
+
+const persist = () => Store.save(state);
+
+/* Allowed shape of profile and settings. Anything outside these bounds, and any
+   key not listed here, is discarded. Entries were already sanitized; profile and
+   settings were not, and both are interpolated into innerHTML, so an imported
+   JSON file could inject markup that runs on the next render. */
+const PROFILE_SPEC = {
+  sex:            {enum:['male','female']},
+  age:            {min:10,  max:110},
+  heightCm:       {min:100, max:230},
+  startWeight:    {min:25,  max:400},
+  activityFactor: {enum:[1.2,1.375,1.55,1.725,1.9], num:true},
+  target1:        {min:30,  max:300},
+  target2:        {min:30,  max:300},
+  calorieGoal:    {min:800, max:6000}
+};
+const SETTINGS_SPEC = {
+  alpha:          {min:0.1, max:0.5},
+  projSource:     {enum:['goal','avg7','custom']},
+  customIntake:   {min:800, max:6000},
+  burnMode:       {enum:['adaptive','formula']},
+  tdeeWindow:     {min:21,  max:120},
+  range:          {enum:['90','180','auto']}
+};
+
+/* Returns defaults with only the values that pass their rule copied over.
+   Rejecting the legacy burnMode 'measured' and tdeeWindow 14 is deliberate:
+   they fail the spec and fall back to the current defaults. */
+function coerce(obj, spec, defaults){
+  const out={...defaults};
+  if(!obj || typeof obj!=='object') return out;
+  for(const key of Object.keys(spec)){
+    const rule=spec[key], raw=obj[key];
+    if(raw===undefined || raw===null) continue;
+    if(rule.enum){
+      const cand = rule.num ? Number(raw) : raw;
+      if(rule.enum.includes(cand)) out[key]=cand;
+      continue;
+    }
+    const n=Number(raw);
+    if(Number.isFinite(n) && n>=rule.min && n<=rule.max) out[key]=n;
+  }
+  return out;
+}
+
+function sanitize(list){
+  const seen=new Map();
+  for(const r of (Array.isArray(list)?list:[])){
+    if(!r || typeof r.date!=='string' || !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) continue;
+    if(Number.isNaN(parseDate(r.date).getTime())) continue;
+    const w=(r.weight==null||r.weight==='')?null:Number(r.weight);
+    const c=(r.calories==null||r.calories==='')?null:Number(r.calories);
+    if(w!==null && (!Number.isFinite(w)||w<25||w>400)) continue;
+    if(c!==null && (!Number.isFinite(c)||c<0||c>12000)) continue;
+    if(w===null && c===null) continue;
+    seen.set(r.date,{date:r.date,weight:w,calories:c});
+  }
+  return [...seen.values()].sort((a,b)=>a.date<b.date?-1:1);
+}
+
+let firstRun=false;   // no saved state at all: prompt for a profile once
+
+function loadState(){
+  const s=Store.load();
+  if(!s || !Array.isArray(s.entries)) firstRun=true;
+  if(s && Array.isArray(s.entries)){
+    state.profile  = coerce(s.profile,  PROFILE_SPEC,  DEFAULT_PROFILE);
+    state.settings = coerce(s.settings, SETTINGS_SPEC, DEFAULT_SETTINGS);
+    state.entries  = sanitize(s.entries);
+  }
+  // First run starts empty. The sample series is available on demand from
+  // Settings → Data → Load sample, so it never invents data you did not log.
+}
+
+/* ============================================================================
+   5 — Derived view model — recomputed on every change
+   ========================================================================== */
+function compute(){
+  const {profile:p, settings:s} = state;
+  const rows    = Model.withEwma(state.entries, s.alpha);
+  const weighed = rows.filter(r=>r.ewma!=null);
+  const lastRow = weighed.length ? weighed[weighed.length-1] : null;
+  const trendNow= lastRow ? lastRow.ewma : null;
+  const lastDate= lastRow ? lastRow.date
+                : (state.entries.length ? state.entries[state.entries.length-1].date : todayStr());
+
+  const tdee = Model.estimateTDEE(rows, {windowDays:s.tdeeWindow, halfLife:14});
+  const formulaTDEE = trendNow!=null
+    ? Model.bmr(trendNow,p.heightCm,p.age,p.sex)*p.activityFactor : null;
+
+  /* Measured burn is bounded to a physiologically sane band around the formula,
+     then mixed in by confidence: 2 weigh-ins barely move it, a month of daily
+     logs replaces the formula almost entirely. The slope therefore shifts a
+     little on every log rather than jumping when a gate flips. */
+  let measured=null, clamped=false, confidence=0;
+  if(tdee.ok && formulaTDEE){
+    measured   = clamp(tdee.tdee, formulaTDEE*0.55, formulaTDEE*1.75);
+    clamped    = Math.abs(measured - tdee.tdee) > 1;
+    confidence = tdee.confidence;
+  }
+
+  let burnNow = formulaTDEE, burnBasis = 'formula';
+  if(s.burnMode==='adaptive' && measured!=null && formulaTDEE){
+    burnNow   = confidence*measured + (1-confidence)*formulaTDEE;
+    burnBasis = 'adaptive';
+  }
+  // Applied to the daily-recomputed formula burn, so the level comes from your
+  // data while the fall in burn as you lose weight still comes from the equation.
+  const calibration = (formulaTDEE && burnNow) ? burnNow/formulaTDEE : 1;
+
+  const avg7 = Model.avgIntake(rows,7);
+  let intake = p.calorieGoal;
+  if (s.projSource==='avg7' && avg7!=null) intake = avg7;
+  if (s.projSource==='custom')             intake = s.customIntake;
+
+  // observed 7-day rate for the headline
+  let rate7=null;
+  if (weighed.length>=2){
+    const win=weighed.filter(r=>r.date>=addDays(lastDate,-6));
+    if(win.length>=2){ const d=diffDays(win[0].date,lastDate);
+      if(d>0) rate7=((lastRow.ewma-win[0].ewma)/d)*7; }
+  }
+
+  const targetOf = (t) => trendNow==null ? null :
+    Model.dateForTarget({startWeight:trendNow, profile:p, intake, calibration, target:t, fromDate:lastDate});
+  const t1=targetOf(p.target1), t2=targetOf(p.target2);
+
+  // Horizon: 'auto' extends far enough to show target 2 being crossed.
+  let horizon = Number(s.range);
+  if (s.range==='auto'){
+    const cands=[t1,t2].filter(x=>x && x.day).map(x=>x.day);
+    horizon = cands.length ? clamp(Math.max(...cands)+20, 90, SEARCH_DAYS) : 180;
+  }
+
+  const projection = trendNow!=null
+    ? Model.project({startWeight:trendNow, profile:p, intake, calibration, days:horizon}) : [];
+
+  return { rows, weighed, lastRow, lastDate, trendNow, rawNow:lastRow?lastRow.weight:null,
+           rate7, tdee, formulaTDEE, burnNow, calibration, burnBasis, intake, avg7,
+           measured, confidence, clamped,
+           projection, horizon, t1, t2,
+           at:(d)=>projection.length>=d?projection[d-1].weight:null };
+}
+
+/* ============================================================================
+   6 — Zone 1: the answer
+   ========================================================================== */
+function renderAnswer(v){
+  const p = state.profile;
+  $('a-trend').textContent = f1(v.trendNow);
+
+  const rateEl = $('a-rate');
+  if (v.rate7==null){ rateEl.textContent=''; }
+  else {
+    const dir = v.rate7 < -0.02 ? '↓' : v.rate7 > 0.02 ? '↑' : '→';
+    rateEl.textContent = `${dir} ${Math.abs(v.rate7).toFixed(2)} kg/wk`;
+    rateEl.className = 'rate ' + (v.rate7 > 0.02 ? 'up' : v.rate7 < -0.02 ? '' : 'flat');
+  }
+
+  const s = $('a-sentence');
+  if (v.trendNow==null){
+    s.textContent='Enter today\u2019s weight and intake below to start the trend.';
+    return;
+  }
+
+  const gap = v.trendNow - p.target1;
+  const lead = gap>0
+    ? `<b>${gap.toFixed(1)} kg</b> to ${f1(p.target1)} kg.`
+    : `You are <b>${Math.abs(gap).toFixed(1)} kg</b> past ${f1(p.target1)} kg.`;
+
+  let tail;
+  if (!v.t1) tail='';
+  else if (v.t1.already) tail=' Target 1 reached.';
+  else if (v.t1.unreachable)
+    tail = ` At ${f0(v.intake)} kcal a day the curve flattens near <b>${f1(v.t1.plateau)} kg</b> and never gets there.`;
+  else
+    tail = ` Eating ${f0(v.intake)} kcal a day gets you there around <span class="date">${longDate(v.t1.date)}</span>.`;
+
+  s.innerHTML = lead + tail;
+}
+
+/* ============================================================================
+   7 — Zone 3: exactly three cards
+   ========================================================================== */
+function targetVal(r){
+  if(!r) return '—';
+  if(r.already) return 'Reached';
+  if(r.unreachable) return 'Not reached';
+  return shortDate(r.date);
+}
+function targetNote(r){
+  if(!r) return 'No weigh-in yet';
+  if(r.already) return 'Trend is at or below this';
+  if(r.unreachable) return `Flattens near ${f1(r.plateau)} kg`;
+  return `${longDate(r.date)} · ${r.day} days`;
+}
+
+function renderCards(v){
+  const p=state.profile;
+  const bal = (v.burnNow!=null) ? v.intake - v.burnNow : null;   // negative = deficit
+
+  $('cards').innerHTML = `
+    <div class="card t1">
+      <p class="eyebrow">Reaches ${f1(p.target1)} kg</p>
+      <div class="v">${targetVal(v.t1)}</div>
+      <div class="n">${targetNote(v.t1)}</div>
+    </div>
+    <div class="card t2">
+      <p class="eyebrow">Reaches ${f1(p.target2)} kg</p>
+      <div class="v">${targetVal(v.t2)}</div>
+      <div class="n">${targetNote(v.t2)}</div>
+    </div>
+    <div class="card bal">
+      <p class="eyebrow">Daily balance</p>
+      <div class="v">${bal==null?'—':signed(bal,0)}<small>kcal</small></div>
+      <div class="n">${v.burnNow==null?'Needs a weigh-in':
+        `Burn ${f0(v.burnNow)} · eating ${f0(v.intake)}`}</div>
+      <div class="n" style="color:${v.burnBasis==='adaptive'?'var(--proj)':'var(--trend)'}">${
+        v.burnNow==null ? '' :
+        v.burnBasis==='adaptive'
+          ? `${Math.round(v.confidence*100)}% from your logs, ${100-Math.round(v.confidence*100)}% formula`
+          : `Formula only · ${state.settings.burnMode==='adaptive' ? v.tdee.reason : 'set in Settings'}`
+      }</div>
+    </div>`;
+}
+
+/* ============================================================================
+   8 — Zone 2: the chart, drawn as inline SVG
+   Written by hand instead of pulling a chart library so the page has zero
+   external requests: it renders offline and inside sandboxed webviews that
+   block CDN scripts. Everything the projection needs to say is drawn in the
+   plot itself — the today divider, the target rules, and the crossing markers.
+   ========================================================================== */
+const Plot = {
+  padL:34, padR:46, padT:16, padB:22,
+  geom:null,          // kept for the scrub readout and hit-testing
+
+  /* Round tick values covering [lo,hi] with roughly n intervals. */
+  ticks(lo,hi,n){
+    const raw=(hi-lo)/n;
+    if(!(raw>0)) return [lo];
+    const mag=Math.pow(10,Math.floor(Math.log10(raw)));
+    const norm=raw/mag;
+    const step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag;
+    const out=[];
+    for(let val=Math.ceil(lo/step)*step; val<=hi+1e-9; val+=step) out.push(Number(val.toFixed(6)));
+    return out;
+  },
+
+  /* Polyline points from every non-null value. Earlier this broke the run at
+     each null, which meant that with non-daily logging every trend value was an
+     isolated point and no trend line was drawn at all. Gaps are now bridged;
+     the vertex dots show where actual weigh-ins sit. */
+  paths(series,X,Y){
+    const pts=[];
+    series.forEach((val,i)=>{ if(val!=null) pts.push(`${X(i).toFixed(1)},${Y(val).toFixed(1)}`); });
+    return pts;
+  },
+
+  render(v){
+    const host=$('plot');
+    const w=host.clientWidth || 340;
+    const h=host.clientHeight || 300;
+    const p=state.profile;
+
+    if(v.trendNow==null){
+      host.innerHTML='<div class="empty">Log two or three weigh-ins and the trend line appears here.<br>'
+                   + 'The projection starts once there is a trend to project.</div>';
+      this.geom=null; return;
+    }
+
+    /* ---- daily label axis: up to 180 days of history, then the horizon ---- */
+    const first=state.entries.length?state.entries[0].date:todayStr();
+    const histStart=diffDays(first,v.lastDate)>180?addDays(v.lastDate,-180):first;
+    const total=Math.max(1,diffDays(histStart,v.lastDate)+v.horizon);
+    const labels=[]; for(let i=0;i<=total;i++) labels.push(addDays(histStart,i));
+    const idx=Object.fromEntries(labels.map((d,i)=>[d,i]));
+    const blank=()=>new Array(labels.length).fill(null);
+
+    const raw=blank(), trend=blank(), proj=blank();
+    for(const r of v.rows){
+      const i=idx[r.date]; if(i===undefined) continue;
+      if(r.weight!=null) raw[i]=r.weight;
+      if(r.ewma!=null)   trend[i]=r.ewma;
+    }
+    proj[idx[v.lastDate]]=v.trendNow;                       // join dashed to solid
+    for(const pt of v.projection){ const i=idx[addDays(v.lastDate,pt.day)]; if(i!==undefined) proj[i]=pt.weight; }
+
+    /* ---- scales ---- */
+    const vals=[...raw,...trend,...proj].filter(n=>n!=null);
+    const lo=Math.min(...vals,p.target1,p.target2)-0.7;
+    const hi=Math.max(...vals,p.target1,p.target2)+0.7;
+    const L=this.padL, R=w-this.padR, T=this.padT, B=h-this.padB;
+    const N=labels.length;
+    const X=(i)=> L + (N<2?0:(i/(N-1))*(R-L));
+    const Y=(val)=> B - ((val-lo)/(hi-lo))*(B-T);
+
+    this.geom={labels,raw,trend,proj,X,Y,L,R,T,B,N,lastIdx:idx[v.lastDate]};
+
+    /* ---- layers ---- */
+    let s='';
+
+    // y gridlines and labels
+    for(const t of this.ticks(lo,hi,5)){
+      const y=Y(t);
+      s+=`<line x1="${L}" y1="${y.toFixed(1)}" x2="${R}" y2="${y.toFixed(1)}" stroke="#222A36" stroke-width="1"/>`
+       + `<text x="${L-6}" y="${(y+3.5).toFixed(1)}" fill="#5C6878" font-size="10" text-anchor="end">${t.toFixed(1)}</text>`;
+    }
+
+    // x labels: 4 evenly spaced dates, first left-aligned, last right-aligned
+    const stepX=Math.max(1,Math.floor((N-1)/3));
+    for(let i=0;i<N;i+=stepX){
+      const anchor = i===0 ? 'start' : (i+stepX>=N ? 'end' : 'middle');
+      s+=`<text x="${X(i).toFixed(1)}" y="${h-6}" fill="#5C6878" font-size="10" text-anchor="${anchor}">${shortDate(labels[i])}</text>`;
+    }
+
+    // target rules, labelled at the right edge
+    const targets=[[p.target1,'#C0605B',v.t1],[p.target2,'#8C4B4B',v.t2]];
+    for(const [kg,col] of targets){
+      const y=Y(kg); if(y<T-1||y>B+1) continue;
+      s+=`<line x1="${L}" y1="${y.toFixed(1)}" x2="${R}" y2="${y.toFixed(1)}" stroke="${col}" stroke-width="1.5" stroke-dasharray="2 4"/>`
+       + `<text x="${R+4}" y="${(y+3.5).toFixed(1)}" fill="${col}" font-size="10" font-weight="600">${kg.toFixed(1)}</text>`;
+    }
+
+    // today divider: everything to its right is simulated
+    const tx=X(this.geom.lastIdx);
+    s+=`<line x1="${tx.toFixed(1)}" y1="${T}" x2="${tx.toFixed(1)}" y2="${B}" stroke="#8A97A8" stroke-width="1" stroke-dasharray="3 3" opacity=".5"/>`
+     + `<text x="${(tx+4).toFixed(1)}" y="${T+8}" fill="#8A97A8" font-size="9" font-weight="600" letter-spacing="1">PROJECTED</text>`;
+
+    // series
+    const projPts=this.paths(proj,X,Y);
+    if(projPts.length>1)
+      s+=`<polyline points="${projPts.join(' ')}" fill="none" stroke="#4FD1C5" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
+
+    const trendPts=this.paths(trend,X,Y);
+    if(trendPts.length>1)
+      s+=`<polyline points="${trendPts.join(' ')}" fill="none" stroke="#E8B14A" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+    // vertex dot at every weigh-in, so a single entry still shows the trend
+    trend.forEach((val,i)=>{ if(val!=null)
+      s+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(val).toFixed(1)}" r="${trendPts.length>1?2.6:4}" fill="#E8B14A"/>`; });
+
+    raw.forEach((val,i)=>{ if(val!=null)
+      s+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(val).toFixed(1)}" r="2.4" fill="#6E829B"/>`; });
+
+    // crossing markers, with the date placed inside the plot
+    for(const [kg,col,res] of targets){
+      if(!res||!res.day||res.unreachable) continue;
+      const i=idx[addDays(v.lastDate,res.day)]; if(i===undefined) continue;
+      const cx=X(i), cy=Y(kg);
+      const flip = cx > R-58;
+      s+=`<line x1="${cx.toFixed(1)}" y1="${cy.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${B}" stroke="${col}" stroke-width="1" stroke-dasharray="2 3" opacity=".8"/>`
+       + `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.5" fill="${col}"/>`
+       + `<text x="${(cx+(flip?-6:6)).toFixed(1)}" y="${(cy+13).toFixed(1)}" fill="${col}" font-size="10" font-weight="600" text-anchor="${flip?'end':'start'}">${shortDate(addDays(v.lastDate,res.day))}</text>`;
+    }
+
+    // crosshair, moved by the scrub handler rather than redrawn
+    s+=`<g id="cross" style="display:none">`
+     + `<line y1="${T}" y2="${B}" stroke="#E6EAF0" stroke-width="1" opacity=".4"/>`
+     + `<circle r="4" fill="#0C0F14" stroke="#E6EAF0" stroke-width="1.5"/></g>`;
+
+    host.innerHTML=`<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="Weight trend and projection">${s}</svg>`;
+    this.moveCross(scrubIndex);
+  },
+
+  /* Nearest index to a client x-coordinate, or null outside the plot. */
+  indexAt(clientX){
+    if(!this.geom) return null;
+    const g=this.geom;
+    const x=clientX-$('plot').getBoundingClientRect().left;
+    if(x<g.L-8||x>g.R+8) return null;
+    return clamp(Math.round(((x-g.L)/(g.R-g.L))*(g.N-1)),0,g.N-1);
+  },
+
+  /* Only the crosshair moves on scrub; the rest of the SVG is untouched. */
+  moveCross(i){
+    const g=this.geom, el=document.getElementById('cross');
+    if(!el) return;
+    if(i==null||!g){ el.style.display='none'; return; }
+    const val = g.trend[i]!=null ? g.trend[i] : g.proj[i];
+    if(val==null){ el.style.display='none'; return; }
+    const x=g.X(i), y=g.Y(val);
+    const line=el.querySelector('line'), dot=el.querySelector('circle');
+    line.setAttribute('x1',x.toFixed(1)); line.setAttribute('x2',x.toFixed(1));
+    dot.setAttribute('cx',x.toFixed(1));  dot.setAttribute('cy',y.toFixed(1));
+    el.style.display='';
+  }
+};
+
+function renderChart(v){ Plot.render(v); renderScrub(); }
+
+/* Continuous scrub readout — replaces +30/+60/+90 cards with every single day. */
+function renderScrub(){
+  const el=$('scrub'), g=Plot.geom;
+  if(!view||view.trendNow==null){ el.textContent=''; return; }
+  if(scrubIndex==null||!g){
+    el.innerHTML=`now <b>${f1(view.trendNow)} kg</b> · drag the chart to read any day`;
+    return;
+  }
+  const date=g.labels[scrubIndex];
+  const trend=g.trend[scrubIndex], projv=g.proj[scrubIndex], scale=g.raw[scrubIndex];
+  const val = trend!=null?trend:projv;
+  if(val==null){ el.textContent=longDate(date); return; }
+  const off=diffDays(view.lastDate,date);
+  el.innerHTML=`${shortDate(date)} · <b>${f1(val)} kg</b> ${trend!=null?'trend':'projected'}`
+    + (scale!=null?` · scale ${f1(scale)}`:'')
+    + (off>0?` · +${off}d`:'');
+}
+
+/* Pointer and touch take the same path: pixel position in, index out. */
+(function attachScrub(){
+  const host=$('plot');
+  const set=(i)=>{ if(i!==scrubIndex){ scrubIndex=i; Plot.moveCross(i); renderScrub(); } };
+  host.addEventListener('mousemove', e=>set(Plot.indexAt(e.clientX)));
+  host.addEventListener('mouseleave',()=>set(null));
+  host.addEventListener('touchstart',e=>set(Plot.indexAt(e.touches[0].clientX)),{passive:true});
+  host.addEventListener('touchmove', e=>set(Plot.indexAt(e.touches[0].clientX)),{passive:true});
+  host.addEventListener('touchend',  ()=>set(null));
+})();
+
+/* Redraw on rotate or resize; SVG geometry is pixel-based, not viewBox-scaled. */
+let resizeTimer=null;
+window.addEventListener('resize',()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer=setTimeout(()=>{ if(view) Plot.render(view); },120);
+});
+
+/* ============================================================================
+   9 — Collapsed detail: log table and model readout
+   ========================================================================== */
+function renderTable(v){
+  const goal=state.profile.calorieGoal;
+  $('entry-count').textContent=state.entries.length;
+  $('table-empty').hidden = state.entries.length>0;
+
+  $('tbody').innerHTML = [...v.rows].reverse().map(r=>{
+    if(r.date===editingDate){
+      return `<tr data-date="${r.date}">
+        <td>${shortDate(r.date)}</td>
+        <td><input type="number" step="0.1" value="${r.weight??''}" data-f="w"></td>
+        <td class="dim">${f1(r.ewma)}</td>
+        <td><input type="number" step="10" value="${r.calories??''}" data-f="c"></td>
+        <td class="dim">—</td>
+        <td><button class="mini primary" data-act="commit">Save</button>
+            <button class="mini ghost" data-act="cancel">Cancel</button></td></tr>`;
+    }
+    const d = r.calories==null ? null : r.calories-goal;
+    return `<tr data-date="${r.date}">
+      <td>${shortDate(r.date)}</td>
+      <td>${r.weight==null?'<span class="dim">—</span>':f1(r.weight)}</td>
+      <td class="dim">${f1(r.ewma)}</td>
+      <td>${r.calories==null?'<span class="dim">—</span>':f0(r.calories)}</td>
+      <td class="${d==null?'dim':(d>0?'over':'under')}">${d==null?'—':signed(d,0)}</td>
+      <td><button class="mini ghost" data-act="edit">Edit</button>
+          <button class="mini ghost danger" data-act="delete">Delete</button></td></tr>`;
+  }).join('');
+}
+
+function renderModel(v){
+  const p=state.profile, t=v.tdee;
+  const rows=[
+    ['Trend weight now', `${f1(v.trendNow)} kg`],
+    ['Resting BMR (Mifflin-St Jeor)', v.trendNow==null?'—':`${f0(Model.bmr(v.trendNow,p.heightCm,p.age,p.sex))} kcal`],
+    [`Formula burn (× ${Number(p.activityFactor).toFixed(3)})`, `${f0(v.formulaTDEE)} kcal`],
+    [`Burn fitted from your logs (${Number(state.settings.tdeeWindow)|0}d window)`,
+      t.ok ? `${f0(t.tdee)}${t.se!=null?` ±${f0(t.se)}`:''} kcal` : `<span class="warn">${t.reason}</span>`],
+    ['After physiological bound', t.ok?`${f0(v.measured)} kcal${v.clamped?' (bounded)':''}`:'—'],
+    ['Confidence in the fit', t.ok?`${Math.round(v.confidence*100)}%`:'0%'],
+    ['Burn used in projection', `${f0(v.burnNow)} kcal · ${v.burnBasis}`],
+    ['Regression inputs', t.ok?`${t.points} weigh-ins over ${t.days} days`:'—'],
+    ['Intake days logged in window', t.ok?`${Math.round(t.coverage*100)}%`:'—'],
+    ['Implied rate at this intake', t.ok?`${signed(t.ratePerWeek)} kg/week`:'—'],
+    ['Calibration factor', v.calibration.toFixed(3)],
+    ['Intake assumed', `${f0(v.intake)} kcal/day`],
+    ['Smoothing α', `${state.settings.alpha.toFixed(2)} per day (half-life ${(Math.log(.5)/Math.log(1-state.settings.alpha)).toFixed(1)} days)`]
+  ];
+  $('model-kv').innerHTML = rows.map(([k,val])=>
+    `<dt>${k}</dt><dd${String(val).includes('warn')?' class="warn"':''}>${val}</dd>`).join('');
+}
+
+/* ---------- segmented controls reflect state ---------- */
+function syncSegs(){
+  for(const b of $('seg-range').children) b.setAttribute('aria-pressed', String(b.dataset.v===state.settings.range));
+  const a=state.settings.alpha;
+  for(const b of $('seg-alpha').children) b.setAttribute('aria-pressed', String(Math.abs(Number(b.dataset.v)-a)<0.005));
+}
+
+function render(){
+  view = compute();
+  renderAnswer(view);
+  renderCards(view);
+  renderChart(view);
+  renderTable(view);
+  renderModel(view);
+  syncSegs();
+}
+
+/* ============================================================================
+   10 — Actions
+   ========================================================================== */
+function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); }
+
+function upsert(date,w,c){
+  const i=state.entries.findIndex(e=>e.date===date);
+  const rec={date,weight:w,calories:c};
+  if(i>=0) state.entries[i]=rec; else state.entries.push(rec);
+  state.entries.sort((a,b)=>a.date<b.date?-1:1);
+  persist();
+}
+
+function validate(w,c){
+  if(w===null && c===null) return 'Enter a weight, an intake, or both.';
+  if(w!==null && (!Number.isFinite(w)||w<25||w>400)) return 'Weight must be 25–400 kg.';
+  if(c!==null && (!Number.isFinite(c)||c<0||c>12000)) return 'Intake must be 0–12,000 kcal.';
+  return null;
+}
+
+function saveFromForm(){
+  const date=$('in-date').value;
+  if(!date){ toast('Pick a date first.'); return; }
+  const wR=$('in-weight').value.trim(), cR=$('in-cal').value.trim();
+  const w=wR===''?null:Number(wR), c=cR===''?null:Number(cR);
+  const err=validate(w,c); if(err){ toast(err); return; }
+  const existed=state.entries.some(e=>e.date===date);
+  upsert(date,w,c); render();
+  toast(existed?`${shortDate(date)} updated.`:`${shortDate(date)} saved.`);
+  $('in-weight').value='';
+  $('in-cal').value=state.profile.calorieGoal;
+  $('in-date').value=todayStr();
+}
+
+$('btn-save').addEventListener('click',saveFromForm);
+['in-date','in-weight','in-cal'].forEach(id=>
+  $(id).addEventListener('keydown',e=>{ if(e.key==='Enter') saveFromForm(); }));
+
+/* prefill the form with whatever is already logged for the chosen date */
+$('in-date').addEventListener('change',()=>{
+  const e=state.entries.find(x=>x.date===$('in-date').value);
+  $('in-weight').value = e && e.weight!=null ? e.weight : '';
+  $('in-cal').value    = e && e.calories!=null ? e.calories : state.profile.calorieGoal;
+});
+
+/* table row actions, delegated */
+$('tbody').addEventListener('click',ev=>{
+  const b=ev.target.closest('button'); if(!b) return;
+  const tr=b.closest('tr'), date=tr.dataset.date, act=b.dataset.act;
+  if(act==='edit'){ editingDate=date; render(); return; }
+  if(act==='cancel'){ editingDate=null; render(); return; }
+  if(act==='delete'){
+    state.entries=state.entries.filter(e=>e.date!==date);
+    persist(); editingDate=null; render(); toast(`${shortDate(date)} deleted.`); return;
+  }
+  if(act==='commit'){
+    const wR=tr.querySelector('[data-f="w"]').value.trim(), cR=tr.querySelector('[data-f="c"]').value.trim();
+    const w=wR===''?null:Number(wR), c=cR===''?null:Number(cR);
+    const err=validate(w,c); if(err){ toast(err); return; }
+    upsert(date,w,c); editingDate=null; render(); toast(`${shortDate(date)} updated.`);
+  }
+});
+
+/* segmented controls */
+$('seg-range').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  state.settings.range=b.dataset.v; persist(); render();
+});
+$('seg-alpha').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  state.settings.alpha=Number(b.dataset.v); persist(); render();
+});
+
+/* ---------- settings dialog ---------- */
+const dlg=$('dlg');
+function openSettings(setup){
+  $('dlg-title').textContent = setup ? 'Set up your profile' : 'Settings';
+  $('dlg-intro').hidden = !setup;
+  $('p-cancel').textContent = setup ? 'Skip for now' : 'Cancel';
+  const p=state.profile, s=state.settings;
+  $('p-sex').value=p.sex; $('p-age').value=p.age; $('p-height').value=p.heightCm;
+  $('p-start').value=p.startWeight; $('p-af').value=String(p.activityFactor);
+  $('p-t1').value=p.target1; $('p-t2').value=p.target2; $('p-cal').value=p.calorieGoal;
+  $('p-source').value=s.projSource; $('p-custom').value=s.customIntake;
+  $('p-burn').value=s.burnMode; $('p-alpha').value=s.alpha;
+  $('wrap-custom').hidden = s.projSource!=='custom';
+  syncAlphaHint(); syncBmiHint();
+  dlg.showModal();
+}
+function syncAlphaHint(){
+  const a=Number($('p-alpha').value);
+  $('p-alpha-v').textContent=a.toFixed(2);
+  $('p-alpha-hint').textContent =
+    `α applies per day: the trend covers half of a real change in about ${(Math.log(.5)/Math.log(1-a)).toFixed(1)} days. Higher reacts faster and shows more noise. Logging gaps are handled — old readings decay by the calendar, not by entry count.`;
+}
+function syncBmiHint(){
+  const h=Number($('p-height').value), t1=Number($('p-t1').value), t2=Number($('p-t2').value);
+  if(!h||!t1){ $('p-bmi').textContent=''; return; }
+  $('p-bmi').textContent = `At ${h} cm that is BMI ${Model.bmi(t1,h).toFixed(1)}`
+    + (t2?` and ${Model.bmi(t2,h).toFixed(1)}.`:'.');
+}
+$('p-alpha').addEventListener('input',syncAlphaHint);
+['p-height','p-t1','p-t2'].forEach(id=>$(id).addEventListener('input',syncBmiHint));
+$('p-source').addEventListener('change',()=>{ $('wrap-custom').hidden = $('p-source').value!=='custom'; });
+
+$('btn-settings').addEventListener('click',()=>openSettings(false));
+$('p-cancel').addEventListener('click',()=>{
+  // Writing state on skip means the setup prompt does not reappear every load.
+  if(firstRun){ firstRun=false; persist(); }
+  dlg.close();
+});
+$('p-save').addEventListener('click',()=>{
+  const next={
+    sex:$('p-sex').value, age:Number($('p-age').value), heightCm:Number($('p-height').value),
+    startWeight:Number($('p-start').value), activityFactor:Number($('p-af').value),
+    target1:Number($('p-t1').value), target2:Number($('p-t2').value), calorieGoal:Number($('p-cal').value)
+  };
+  // a bad height silently poisons every BMR downstream, so validate before committing
+  const bad =
+    !Number.isFinite(next.age)||next.age<10||next.age>110 ? 'Age must be 10–110.' :
+    !Number.isFinite(next.heightCm)||next.heightCm<100||next.heightCm>230 ? 'Height must be 100–230 cm.' :
+    !Number.isFinite(next.startWeight)||next.startWeight<25||next.startWeight>400 ? 'Start weight must be 25–400 kg.' :
+    !Number.isFinite(next.target1)||next.target1<30||next.target1>300 ? 'Target 1 must be 30–300 kg.' :
+    !Number.isFinite(next.target2)||next.target2<30||next.target2>300 ? 'Target 2 must be 30–300 kg.' :
+    !Number.isFinite(next.calorieGoal)||next.calorieGoal<800||next.calorieGoal>6000 ? 'Intake goal must be 800–6,000 kcal.' :
+    null;
+  if(bad){ toast(bad); return; }
+
+  const custom=Number($('p-custom').value);
+  if($('p-source').value==='custom' && (!Number.isFinite(custom)||custom<800||custom>6000)){
+    toast('Fixed intake must be 800–6,000 kcal.'); return;
+  }
+
+  state.profile=next;
+  state.settings.projSource=$('p-source').value;
+  state.settings.customIntake=custom;
+  state.settings.burnMode=$('p-burn').value;
+  state.settings.alpha=Number($('p-alpha').value);
+  persist();
+  $('in-cal').value=next.calorieGoal;
+  firstRun=false;
+  dlg.close(); render(); toast('Settings saved.');
+});
+
+/* ---------- data ---------- */
+$('btn-export').addEventListener('click',()=>{
+  const blob=new Blob([JSON.stringify({app:'trajectory',version:1,exportedAt:new Date().toISOString(),
+    profile:state.profile,settings:state.settings,entries:state.entries},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=`trajectory-${todayStr()}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  toast('Exported.');
+});
+$('btn-import').addEventListener('click',()=>$('file-import').click());
+$('file-import').addEventListener('change',ev=>{
+  const f=ev.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const data=JSON.parse(r.result);
+      const clean=sanitize(Array.isArray(data)?data:data.entries);
+      if(!clean.length){ toast('No valid entries in that file.'); return; }
+      state.entries=clean;
+      if(data.profile)  state.profile  = coerce(data.profile,  PROFILE_SPEC,  DEFAULT_PROFILE);
+      if(data.settings) state.settings = coerce(data.settings, SETTINGS_SPEC, DEFAULT_SETTINGS);
+      persist(); editingDate=null; render(); toast(`Imported ${clean.length} entries.`);
+    }catch(e){ toast('That file is not valid JSON.'); }
+    ev.target.value='';
+  };
+  r.readAsText(f);
+});
+$('btn-sample').addEventListener('click',()=>{
+  if(state.entries.length && !confirm('Replace every entry with the 15-day sample?')) return;
+  state.entries=buildSample(); persist(); render(); toast('Sample loaded.');
+});
+$('btn-clear').addEventListener('click',()=>{
+  if(!confirm('Delete every logged entry? This cannot be undone.')) return;
+  state.entries=[]; persist(); editingDate=null; render(); toast('All entries deleted.');
+});
+
+/* ============================================================================
+   11 — Boot
+   ========================================================================== */
+function boot(){
+  if(!Store.available()) $('storage-warning').hidden=false;
+  loadState();
+  $('in-date').value=todayStr();
+  const today=state.entries.find(e=>e.date===todayStr());
+  $('in-weight').value = today && today.weight!=null ? today.weight : '';
+  $('in-cal').value    = today && today.calories!=null ? today.calories : state.profile.calorieGoal;
+  render();
+  if(firstRun) openSettings(true);
+}
+if(document.readyState==='loading') window.addEventListener('DOMContentLoaded',boot);
+else boot();
+</script>
+</body>
+</html>

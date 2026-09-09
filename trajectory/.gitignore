@@ -1,0 +1,12 @@
+# Exported logs contain personal health data. Never commit them.
+trajectory-*.json
+*.export.json
+data/
+private/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

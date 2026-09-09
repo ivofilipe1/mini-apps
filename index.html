@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">
+<meta name="theme-color" content="#16141a">
+<title>mini-apps</title>
+<meta name="description" content="A collection of small, self-contained web apps. One HTML file each, no dependencies, no server, no tracking.">
+<style>
+:root{
+  --ink:#16141a; --page:#0e0d11; --bone:#ece7dd; --dim:#98918a;
+  --faint:#6a635c; --line:#2e2a33; --accent:#7f9e7a;
+  /* device fonts only, matching the apps: no request, no font flash */
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --serif:Georgia,'Iowan Old Style','Palatino Linotype','Noto Serif',serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;min-height:100vh;background:var(--page);color:var(--bone);
+  font-family:var(--sans);line-height:1.6;
+  display:flex;justify-content:center;
+}
+.shell{width:100%;max-width:680px;background:var(--ink);
+  padding:calc(52px + env(safe-area-inset-top)) 28px calc(40px + env(safe-area-inset-bottom))}
+
+header{border-bottom:1px solid var(--line);padding-bottom:26px}
+h1{font-family:var(--serif);font-style:italic;font-weight:400;
+  font-size:clamp(30px,7vw,38px);margin:0;letter-spacing:-.5px}
+.lede{color:var(--dim);font-size:14.5px;margin:10px 0 0;max-width:46ch}
+
+.list{list-style:none;padding:0;margin:0}
+.list li{border-bottom:1px solid var(--line)}
+.card{
+  display:block;text-decoration:none;color:inherit;
+  padding:26px 0 24px;
+  transition:padding-left .18s ease, border-color .18s;
+}
+.card:hover,.card:focus-visible{padding-left:10px;outline:none}
+.card:hover .name,.card:focus-visible .name{color:var(--accent)}
+.card:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:2px}
+.name{font-family:var(--serif);font-style:italic;font-weight:400;font-size:23px;
+  letter-spacing:-.2px;transition:color .18s;display:block}
+.what{color:var(--dim);font-size:14px;margin:6px 0 0;max-width:56ch}
+.tags{margin:12px 0 0;display:flex;flex-wrap:wrap;gap:7px}
+.tag{font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint);
+  border:1px solid var(--line);border-radius:2px;padding:4px 9px}
+
+.rules{margin:34px 0 0;padding:0;list-style:none;counter-reset:r}
+.rules li{counter-increment:r;position:relative;padding-left:30px;margin-bottom:13px;
+  font-size:13.5px;color:var(--dim);max-width:56ch}
+.rules li::before{content:counter(r,decimal-leading-zero);position:absolute;left:0;top:1px;
+  font-size:10.5px;letter-spacing:1.4px;color:var(--faint)}
+.rules b{color:var(--bone);font-weight:500}
+h2{font-size:10.5px;letter-spacing:2.1px;text-transform:uppercase;color:var(--faint);
+  font-weight:400;margin:44px 0 0}
+
+footer{margin-top:44px;padding-top:22px;border-top:1px solid var(--line);
+  font-size:12.5px;color:var(--faint)}
+footer a{color:var(--dim)}
+@media (max-width:420px){.shell{padding-left:22px;padding-right:22px}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header>
+    <h1>mini-apps</h1>
+    <p class="lede">Small, self-contained web apps. One HTML file each — open it in a
+      browser and it runs.</p>
+  </header>
+
+  <ul class="list">
+    <li><a class="card" href="tide/">
+      <span class="name">Tide</span>
+      <p class="what">A paced breathing timer. Cyclic breaths, an open-ended hold on
+        empty lungs, then a timed recovery hold. The screen fills and drains with your
+        lungs, so the phase is readable without looking at the numbers.</p>
+      <div class="tags"><span class="tag">breathing</span><span class="tag">no storage</span><span class="tag">audio + haptics</span></div>
+    </a></li>
+    <li><a class="card" href="trajectory/">
+      <span class="name">Trajectory</span>
+      <p class="what">A weight and calorie tracker. Smooths your scale readings, fits
+        your real energy expenditure from your own logs rather than a formula, and
+        projects ninety days forward.</p>
+      <div class="tags"><span class="tag">health</span><span class="tag">local storage only</span><span class="tag">hand-drawn svg chart</span></div>
+    </a></li>
+  </ul>
+
+  <h2>House rules</h2>
+  <ol class="rules">
+    <li><b>One file.</b> No build step, no package manager, no framework. What you read
+      is what runs.</li>
+    <li><b>No outbound requests.</b> No CDN, no webfont, no analytics, no tracking
+      pixel. Type comes from fonts already on your device.</li>
+    <li><b>Your data stays yours.</b> Anything an app stores is kept in your own
+      browser and never leaves it. There are no accounts and no server.</li>
+  </ol>
+
+  <footer>
+    Source on <a href="https://github.com/ivofilipe1/mini-apps">GitHub</a> · MIT licensed ·
+    These are personal tools, not medical devices, and nothing here is medical advice.
+  </footer>
+
+</div>
+</body>
+</html>
