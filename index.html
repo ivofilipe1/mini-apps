@@ -6,7 +6,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">
 <meta name="theme-color" content="#17141d">
 <title>mini-apps</title>
-<meta name="description" content="A collection of small, self-contained web apps. One HTML file each, no dependencies, no server, no tracking.">
+<meta name="description" content="Small, practical tools for wellbeing, health, and everyday life. No accounts, no subscriptions, and no data leaving your device.">
 <style>
 :root{
   /* Surfaces step by roughly 5 points of perceptual lightness (CIE L*), so
@@ -71,12 +71,8 @@ h1{font-family:var(--serif);font-style:italic;font-weight:400;
 
 h2{font-size:10.5px;letter-spacing:2.1px;text-transform:uppercase;color:var(--faint);
   font-weight:400;margin:40px 0 0}
-.rules{margin:18px 0 0;padding:0;list-style:none;counter-reset:r}
-.rules li{counter-increment:r;position:relative;padding-left:30px;margin-bottom:13px;
-  font-size:13.5px;color:var(--dim);max-width:58ch}
-.rules li::before{content:counter(r,decimal-leading-zero);position:absolute;left:0;top:2px;
-  font-size:10.5px;letter-spacing:1.4px;color:var(--faint)}
-.rules b{color:var(--bone);font-weight:500}
+.goal{margin:16px 0 0;font-size:14px;color:var(--dim);max-width:58ch}
+.goal b{color:var(--bone);font-weight:500}
 
 footer{margin-top:40px;padding-top:22px;border-top:1px solid var(--line);
   font-size:12.5px;color:var(--faint)}
@@ -94,8 +90,8 @@ footer a:hover{color:var(--bone)}
 
   <header>
     <h1>mini-apps</h1>
-    <p class="lede">Small, self-contained web apps. One HTML file each — open it in a
-      browser and it runs.</p>
+    <p class="lede">Small, practical tools for wellbeing, health, and the admin of
+      everyday life.</p>
   </header>
 
   <ul class="list">
@@ -121,15 +117,11 @@ footer a:hover{color:var(--bone)}
     </a></li>
   </ul>
 
-  <h2>House rules</h2>
-  <ol class="rules">
-    <li><b>One file.</b> No build step, no package manager, no framework. What you read
-      is what runs.</li>
-    <li><b>No outbound requests.</b> No CDN, no webfont, no analytics, no tracking
-      pixel. Type comes from fonts already on your device.</li>
-    <li><b>Your data stays yours.</b> Anything an app stores is kept in your own
-      browser and never leaves it. There are no accounts and no server.</li>
-  </ol>
+  <h2>Why this exists</h2>
+  <p class="goal"><b>Tools I wanted and couldn't find.</b> Most apps for health, habits
+    and daily admin want an account, a subscription, and a copy of your data. These want
+    none of that: each one is a single page that runs in your browser and keeps
+    everything on your device.</p>
 
   <footer>
     Source on <a href="https://github.com/ivofilipe1/mini-apps">GitHub</a> · MIT licensed ·
