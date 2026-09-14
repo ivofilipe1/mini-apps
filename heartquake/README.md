@@ -88,6 +88,10 @@ One toggle per exercise, on or off. **No reason is asked for and none is
 stored** — injury, strength, mobility, a bad wrist, it makes no difference to
 what the app does.
 
+Groups start collapsed, so the sheet opens as seven headers rather than
+thirty-nine switches. Each header carries a live count — `4 of 6 on` — so you
+can see a group has something switched off without opening it.
+
 Toggles are shared across routines: an exercise you cannot do is one you cannot
 do wherever it appears, so turning off Burpee removes it from both Ground & Up
 and Bar. The sheet lists each exercise once and notes where it is reused.
@@ -119,6 +123,21 @@ Ending early still shows the summary for what you actually did.
 The stage drains left to right over the current interval, so how much of it is
 left is readable from the floor without focusing on the number. Colour carries
 the phase: amber for warm-up, red for work, green for rest.
+
+Under each exercise name is a looping stick figure showing the shape of the
+movement. Where a pose would otherwise be an ambiguous diagonal, it is drawn
+with its scenery — the bar you hang from, the wall your feet are on, the edge
+you dip from — because a hang and a plank are the same line without it.
+
+Views are chosen per exercise rather than kept consistent. Prone Y-T-W is drawn
+from above, because a side view flattens Y, T and W into the same silhouette;
+Superman stays side-on, because the lift is the whole point of it.
+
+During a work interval the figure replaces the cue text: you are moving, not
+reading. The cue comes back during the ten-second rest, alongside the figure
+for whatever is next — so the rest is spent preparing rather than waiting.
+
+`prefers-reduced-motion` holds the first frame instead of looping.
 
 ## Cues
 
@@ -155,15 +174,19 @@ hosted one — same app, different origin, so settings do not carry across.
   hidden pages. Switching tabs or apps mid-session pauses the count rather than
   letting it run in the background. The wake lock keeps the display awake, but
   it cannot help if you navigate away.
-- **Form cues are text.** They describe the shape of the movement but cannot
-  show it, and several of them — *elbows at 45°*, *ribs down*, *flat back* — are
-  the exact things a beginner gets wrong. If you have not done an exercise
-  before, look it up rather than guessing from one line.
+- **The figures show shape and nothing finer.** A stick figure has no wrists,
+  no spine curvature and no shoulder rotation, so it cannot show *elbows at
+  45°*, *ribs down*, *flat back* or *squeeze the shoulder blades* — which are
+  the exact things a beginner gets wrong. That is what the cue text is for, and
+  the two are meant to be read together. If you have not done an exercise
+  before, look it up rather than trusting either one alone.
+- Archer push-up and the other one-sided exercises animate a single side; the
+  `Switch sides` cue owns the other half, so the figure does not mirror.
 - **The heart-rate labels are descriptive, not measured.** Nothing here reads
   your pulse. They rank the routines against each other, and that is all they
   claim.
 - Collapse state in the exercise sheet is not remembered; it opens all-collapsed
-  every time.
+  every time. Deliberate — it is ephemeral UI, not a preference worth storing.
 
 ## Type
 

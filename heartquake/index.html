@@ -147,11 +147,27 @@ body{
   letter-spacing:2px;text-transform:uppercase;cursor:pointer;padding:6px 0}
 .sheettop button:hover{color:var(--bone)}
 .sheetbody{flex:1;overflow-y:auto;padding:0 var(--gut) calc(34px + env(safe-area-inset-bottom))}
-.grp{margin-top:26px}
-.grp h3{font-size:10.5px;letter-spacing:2.1px;text-transform:uppercase;color:var(--faint);
-  font-weight:400;margin:0 0 2px}
-.grp .thin{font-size:12px;color:var(--faint);margin:0 0 6px}
-.warnrow{margin:8px 0 0;padding-left:13px;border-left:2px solid var(--warm);
+.grp{margin-top:8px}
+.ghead{width:100%;display:flex;align-items:center;justify-content:space-between;gap:14px;
+  background:none;border:0;border-bottom:1px solid var(--line);color:inherit;font:inherit;
+  cursor:pointer;padding:15px 0;text-align:left}
+.ghead:hover .gname{color:var(--bone-dim)}
+.ghead:focus-visible{outline:2px solid var(--pulse);outline-offset:2px}
+.gname{font-size:10.5px;letter-spacing:2.1px;text-transform:uppercase;color:var(--faint)}
+.gright{display:flex;align-items:center;gap:12px;flex:0 0 auto}
+/* The count is what makes collapsing safe: you can see a group has something
+   switched off without opening it. */
+.gcount{font-size:11.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+.gcount.part{color:var(--pulse)}
+.chev{width:8px;height:8px;border-right:1.5px solid var(--faint);
+  border-bottom:1.5px solid var(--faint);transform:rotate(45deg);
+  margin-bottom:3px;transition:transform .18s}
+.ghead[aria-expanded="true"] .chev{transform:rotate(-135deg);margin-bottom:-3px}
+.gbody{padding-bottom:10px}
+.grp .thin{font-size:12px;color:var(--faint);margin:10px 0 0}
+/* Sits outside the collapsible body on purpose — a routine that cannot run
+   has to say so while the group is shut. */
+.warnrow{margin:10px 0 0;padding-left:13px;border-left:2px solid var(--warm);
   font-size:12px;color:#b9ada0;line-height:1.55}
 
 /* ---------- session ---------- */
@@ -183,6 +199,19 @@ body{
 .stage.warm .phase{color:var(--warm)}
 .exname{font-family:var(--serif);font-style:italic;font-weight:400;
   font-size:clamp(29px,5.6vw,50px);line-height:1.12;margin:9px 0 0;letter-spacing:-.5px}
+/* The figure carries the shape of the movement; the cue text carries what a
+   stick figure physically cannot show. During a work interval the figure
+   replaces the cue, because at that point you are moving, not reading — the
+   cue comes back during the rest before the next one. */
+.fig{display:block;margin:clamp(2px,1vw,10px) auto 0;
+  width:clamp(150px,32vw,270px);height:auto}
+.fig .lm{stroke:var(--pulse);stroke-width:3.6;stroke-linecap:round;fill:none}
+.stage.rest .fig .lm{stroke:var(--rest)}
+.stage.warm .fig .lm{stroke:var(--warm)}
+.fig .fl{stroke:var(--line-hi);stroke-width:1.6}
+.fig .pr{stroke:var(--line-hi);stroke-width:2.4;stroke-linecap:round;fill:none}
+.readout.nocue .cue{display:none}
+
 .num{font-size:clamp(66px,13vw,150px);font-weight:300;line-height:1;
   font-variant-numeric:tabular-nums;letter-spacing:-.03em;margin-top:clamp(4px,1vw,12px)}
 .cue{font-size:14px;color:var(--bone-dim);margin:clamp(6px,1.2vw,14px) auto 0;max-width:44ch;
@@ -222,6 +251,7 @@ footer.foot{margin-top:34px;padding-top:20px;border-top:1px solid var(--line);
 
 @media (prefers-reduced-motion:reduce){.drain{transition:none}}
 @media (max-height:560px){
+  .fig{width:clamp(92px,17vh,140px)}
   .exname{font-size:clamp(21px,4.4vh,30px)}
   .num{font-size:clamp(44px,11vh,74px)}
   .cue{font-size:12.5px;min-height:18px}
@@ -315,6 +345,7 @@ footer.foot{margin-top:34px;padding-top:20px;border-top:1px solid var(--line);
       <div class="readout">
         <div class="phase" id="phaseLabel">—</div>
         <div class="exname" id="exName">—</div>
+        <svg class="fig" id="figure" viewBox="0 0 120 100" aria-hidden="true"></svg>
         <div class="num" id="bigNum">0</div>
         <div class="cue" id="cueText"></div>
         <div class="switch" id="switchCue"></div>
@@ -473,6 +504,157 @@ const EQUIP = [
   {id:"roll",    n:"Foam roller",    e:"Rolling instead of two of the stretches"}
 ];
 
+/* ---------------- stick figures ----------------
+   Eleven joints per pose, flattened: head, neck, pelvis, elbowL, handL,
+   elbowR, handR, kneeL, footL, kneeR, footR. viewBox is 0 0 120 100 with the
+   floor at y=92. Animation is a loop of poses interpolated with a smoothstep.
+
+   Views are chosen per exercise rather than kept consistent: Y-T-W is drawn
+   from above because a side view flattens Y, T and W into the same silhouette,
+   while Superman stays side-on because the lift is what you are looking at.
+
+   A figure shows the shape of a movement and nothing finer. It cannot show
+   elbow angle, spine position or grip — that is what the cue text is for. */
+const FIG = {
+  stand:[60,16,60,29,60,55,51,43,49,57,69,43,71,57,55,73,54,92,65,73,66,92],
+  jackOpen:[60,16,60,29,60,55,45,33,33,21,75,33,87,21,48,72,39,92,72,72,81,92],
+  armsUp:[60,16,60,29,60,55,52,34,48,16,68,34,72,16,55,73,54,92,65,73,66,92],
+  armsSide:[60,16,60,29,60,55,46,31,32,29,74,31,88,29,55,73,54,92,65,73,66,92],
+  handsHead:[60,16,60,29,60,55,44,30,52,24,76,30,68,24,55,73,54,92,65,73,66,92],
+  jump:[60,10,60,23,60,48,47,17,41,7,73,17,79,7,54,66,52,82,66,66,68,82],
+  rope:[60,14,60,27,60,53,50,36,46,46,70,36,74,46,56,70,55,86,64,70,65,86],
+  squatBot:[60,27,60,39,60,60,48,46,45,35,72,46,75,35,47,70,50,92,73,70,70,92],
+  deepSquat:[60,32,60,43,60,64,51,53,54,44,69,53,66,44,45,72,50,92,75,72,70,92],
+  hipL:[54,17,56,30,62,55,46,38,50,50,68,36,70,50,56,73,54,92,66,73,66,92],
+  hipR:[66,17,64,30,58,55,52,36,50,50,74,38,70,50,56,73,54,92,66,73,66,92],
+  swingFwd:[60,16,60,29,60,55,48,40,42,44,70,42,74,52,72,68,84,74,63,73,62,92],
+  swingBack:[60,16,60,29,60,55,48,40,42,44,70,42,74,52,46,70,34,80,63,73,62,92],
+  lungeL:[54,20,55,32,58,56,45,42,42,54,68,42,72,54,44,70,40,92,74,74,78,92],
+  lungeR:[66,20,65,32,62,56,52,42,48,54,75,42,78,54,46,74,42,92,76,70,80,92],
+  lungeBack:[58,20,58,32,58,56,47,43,44,55,69,43,72,55,46,70,42,92,76,76,84,90],
+  splitUp:[58,18,58,30,58,54,47,41,44,53,69,41,72,53,46,70,42,92,74,72,82,90],
+  splitDown:[58,26,58,38,58,62,47,49,44,61,69,49,72,61,42,74,40,92,78,80,86,91],
+  cossackL:[46,30,48,41,54,62,38,48,34,40,60,48,64,40,40,74,38,92,76,84,92,90],
+  cossackR:[74,30,72,41,66,62,60,48,56,40,82,48,86,40,80,74,82,92,44,84,28,90],
+  skateL:[46,24,48,36,54,58,36,44,30,52,62,44,68,36,44,74,40,92,74,68,86,78],
+  skateR:[74,24,72,36,66,58,58,44,52,36,84,44,90,52,76,74,80,92,46,68,34,78],
+  oneLeg:[60,16,60,29,60,55,48,42,44,54,72,42,76,54,56,73,55,92,70,70,78,80],
+  rdlHinge:[94,46,84,48,58,52,86,60,88,74,84,61,86,75,56,72,56,92,38,44,20,38],
+  gmHinge:[100,50,86,50,60,52,84,30,94,40,82,32,92,42,58,72,58,92,62,72,62,92],
+  plankHigh:[88,54,78,58,54,66,78,74,78,91,76,75,76,91,36,76,20,87,34,77,18,88],
+  plankLow:[88,66,78,70,56,74,88,80,76,91,86,81,74,91,38,81,21,88,36,82,19,89],
+  plankElbow:[86,68,76,72,54,77,66,80,60,91,64,81,58,91,36,83,20,89,34,84,18,90],
+  plankKneeL:[88,54,78,58,54,66,78,74,78,91,76,75,76,91,62,70,66,80,34,77,18,88],
+  plankKneeR:[88,54,78,58,54,66,78,74,78,91,76,75,76,91,36,76,20,87,62,70,66,80],
+  tapL:[88,54,78,58,54,68,70,66,76,56,76,75,76,91,36,76,24,89,34,77,16,90],
+  tapR:[88,54,78,58,54,68,78,74,78,91,70,66,76,56,36,76,16,90,34,77,24,89],
+  archerL:[88,62,78,66,54,72,92,76,98,91,72,80,58,91,38,79,22,88,36,80,20,89],
+  bearA:[88,58,78,62,52,64,80,76,82,91,74,76,70,91,44,76,40,90,38,78,30,91],
+  bearB:[88,58,78,62,52,64,76,76,70,91,80,76,84,91,38,78,30,91,44,76,40,90],
+  pikeUp:[74,56,70,50,48,30,76,64,80,88,74,65,78,89,42,56,34,90,40,57,32,91],
+  pikeDown:[80,72,72,64,48,32,84,78,82,90,82,79,80,91,42,58,34,90,40,59,32,91],
+  dipTop:[78,36,70,44,56,58,74,54,76,64,72,55,74,65,36,64,20,88,34,65,18,89],
+  dipDown:[78,50,70,58,56,70,80,62,76,64,78,63,74,65,36,74,20,90,34,75,18,91],
+  wallWalkA:[74,66,70,58,52,44,74,72,76,90,72,73,74,91,36,40,22,34,34,41,20,35],
+  wallWalkB:[52,58,50,50,40,32,52,66,54,90,50,67,52,91,30,26,21,18,28,27,19,19],
+  fold:[74,72,66,62,52,38,70,74,72,89,68,75,70,90,54,64,56,92,52,65,54,92],
+  inchOut:[82,68,74,64,56,50,78,74,80,90,76,75,78,91,50,68,48,90,48,69,46,91],
+  hang:[62,34,62,44,62,62,60,26,58,12,68,26,70,12,62,76,62,92,68,76,70,92],
+  pullTop:[62,22,62,32,62,52,52,22,58,12,72,22,66,12,62,68,62,86,68,68,70,86],
+  hangScap:[62,30,62,40,62,58,60,24,58,12,68,24,70,12,62,72,62,90,68,72,70,90],
+  hangKnees:[62,34,62,44,60,60,60,26,58,12,68,26,70,12,78,56,84,68,80,58,86,70],
+  supineDown:[22,86,32,86,58,88,26,90,20,91,28,91,22,92,74,74,88,90,72,75,86,91],
+  supineUp:[22,86,32,86,58,68,26,90,20,91,28,91,22,92,76,66,88,90,74,67,86,91],
+  supineSlDn:[22,86,32,86,58,88,26,90,20,91,28,91,22,92,74,74,88,90,68,70,80,56],
+  supineSlUp:[22,86,32,86,58,66,26,90,20,91,28,91,22,92,76,64,88,90,62,48,70,28],
+  proneFlat:[96,84,86,85,58,88,92,90,98,91,90,91,96,92,36,88,20,90,34,89,18,91],
+  proneLift:[96,72,86,76,58,86,96,66,104,58,94,67,102,59,36,84,18,74,34,85,16,75],
+  proneRow:[96,78,86,80,58,88,96,88,96,74,94,89,94,75,36,88,20,90,34,89,18,91],
+  bandRowPull:[34,50,42,56,56,74,32,62,46,60,30,63,44,61,76,70,92,80,74,71,90,81],
+  bandRow:[34,50,42,56,56,74,54,60,68,62,52,61,66,63,76,70,92,80,74,71,90,81],
+  revPlank:[30,52,38,56,62,62,34,72,32,90,36,73,34,91,82,66,96,88,80,67,94,89],
+  hollow:[36,68,44,72,64,84,26,58,14,50,28,59,16,51,82,70,98,56,80,71,96,57],
+  sidePlankUp:[88,44,80,50,56,66,78,66,76,90,82,40,86,26,38,78,22,88,36,79,20,89],
+  sidePlankDn:[88,54,80,60,56,78,78,72,76,91,82,50,86,36,38,84,22,90,36,85,20,91],
+  quadBack:[90,60,82,60,54,58,82,72,84,90,80,73,82,91,46,70,40,88,44,71,38,89],
+  quadFwd:[96,64,86,64,56,62,88,76,82,91,86,77,80,92,46,72,40,88,44,73,38,89],
+  worlds:[86,50,78,56,52,68,76,70,74,90,84,62,92,48,46,68,44,92,34,80,18,90],
+  hipFlex:[70,36,68,46,60,64,58,52,52,44,78,52,84,44,84,72,92,90,40,78,26,90],
+  couch:[66,40,64,50,58,66,54,56,48,48,74,56,80,48,82,74,92,90,42,72,30,52],
+  pigeon:[80,58,74,62,54,72,78,74,82,90,76,75,80,91,40,70,62,80,36,82,16,90],
+  openA:[30,60,40,62,62,70,34,58,26,48,36,59,28,49,78,58,92,68,76,59,90,69],
+  openB:[30,60,40,62,62,70,34,58,26,48,50,46,66,44,78,58,92,68,76,59,90,69],
+  tRoll:[26,66,36,66,62,74,30,56,22,48,32,57,24,49,80,66,92,86,78,67,90,87],
+  ytY:[60,20,60,32,60,62,46,22,38,12,74,22,82,12,56,76,55,90,64,76,65,90],
+  ytT:[60,20,60,32,60,62,44,32,30,32,76,32,90,32,56,76,55,90,64,76,65,90],
+  ytW:[60,20,60,32,60,62,44,40,48,26,76,40,72,26,56,76,55,90,64,76,65,90],
+  gRoll:[30,54,40,58,64,72,32,68,26,84,34,69,28,85,84,62,96,80,60,60,48,50]
+};
+
+/* Static scenery. Without it a hang and a plank are the same diagonal. */
+const PROPS = {
+  bar:   ["line",   {x1:38, y1:11, x2:86, y2:11}],
+  wall:  ["line",   {x1:15, y1:4,  x2:15, y2:92}],
+  box:   ["path",   {d:"M66 66 H104 V92"}],
+  roller:["circle", {cx:78, cy:86, r:6}]
+};
+const POSE_PROP = {
+  hang:"bar", pullTop:"bar", hangScap:"bar", hangKnees:"bar",
+  wallWalkA:"wall", wallWalkB:"wall", couch:"wall",
+  dipTop:"box", dipDown:"box", tRoll:"roller", gRoll:"roller"
+};
+
+/* Keyed by exercise id; "id.equipment" overrides it when that variant is live.
+   ms is one full cycle through the frames. Stretches are a single frame — they
+   are held, so there is nothing to animate. */
+const ANIM = {
+  jacks:{f:["stand","jackOpen"],ms:900},        "jacks.rope":{f:["rope","stand"],ms:520},
+  armcircle:{f:["stand","armsSide","armsUp","armsSide"],ms:1800},
+  wrists:{f:["quadBack","quadFwd"],ms:1400},
+  legswing:{f:["swingFwd","swingBack"],ms:1200},
+  hipcircle:{f:["hipL","hipR"],ms:1400},
+  inchworm:{f:["fold","inchOut","plankHigh","inchOut"],ms:2600},
+
+  burpee:{f:["stand","squatBot","plankHigh","squatBot","jump"],ms:2600},
+  plankpush:{f:["plankHigh","plankElbow"],ms:1200},
+  mtnclimb:{f:["plankKneeL","plankKneeR"],ms:700},
+  jumplunge:{f:["lungeL","jump","lungeR","jump"],ms:1500},
+  skater:{f:["skateL","skateR"],ms:900},
+  pushup:{f:["plankHigh","plankLow"],ms:1400},
+
+  worlds:{f:["worlds"]}, deepsquat:{f:["deepSquat"]},
+  hipflexor:{f:["hipFlex"]}, "hipflexor.wall":{f:["couch"]},
+  fold:{f:["fold"]},
+  openbook:{f:["openA","openB"],ms:3600}, "openbook.roll":{f:["tRoll"]},
+  pigeon:{f:["pigeon"]}, "pigeon.roll":{f:["gRoll"]},
+
+  revlunge:{f:["stand","lungeBack"],ms:1600},
+  cossack:{f:["cossackL","cossackR"],ms:1900},
+  splitsq:{f:["splitUp","splitDown"],ms:1400},
+  slrdl:{f:["oneLeg","rdlHinge"],ms:1900},
+  slbridge:{f:["supineSlDn","supineSlUp"],ms:1600},
+  sideplank:{f:["sidePlankUp","sidePlankDn"],ms:1700},
+
+  bridge:{f:["supineDown","supineUp"],ms:1600},
+  goodmorn:{f:["handsHead","gmHinge"],ms:1900},
+  superman:{f:["proneFlat","proneLift"],ms:1600},
+  revplank:{f:["revPlank"]}, hollow:{f:["hollow"]},
+  ytw:{f:["ytY","ytT","ytW"],ms:2600},
+
+  pullup:{f:["hang","pullTop"],ms:1800},
+  kneeraise:{f:["hang","hangKnees"],ms:1600},
+  scappull:{f:["hang","hangScap"],ms:1400},
+  squatjump:{f:["squatBot","jump"],ms:1000},
+
+  pike:{f:["pikeUp","pikeDown"],ms:1500}, "pike.wall":{f:["wallWalkA","wallWalkB"],ms:2600},
+  /* archer shows one side only: the side-switch cue owns the other half */
+  archer:{f:["plankHigh","archerL"],ms:1500},
+  shoulder:{f:["tapL","tapR"],ms:1300}, "shoulder.surface":{f:["dipTop","dipDown"],ms:1400},
+  bearcrawl:{f:["bearA","bearB"],ms:1100},
+  supermanrow:{f:["proneFlat","proneRow"],ms:1400},
+  "supermanrow.band":{f:["bandRow","bandRowPull"],ms:1500}
+};
+
 /* ---------------- helpers ---------------- */
 const $ = s => document.querySelector(s);
 const pad2 = n => String(n).padStart(2,"0");
@@ -515,8 +697,9 @@ function persist(){
 /* variant resolution: base exercise unless the equipment it wants is on */
 function resolve(id){
   const base = EX[id]; if (!base) return null;
-  if (base.v) for (const q in base.v) if (cfg.equip[q]) return { n:base.v[q].n, c:base.v[q].c, ex:base };
-  return { n:base.n, c:base.c, ex:base };
+  if (base.v) for (const q in base.v) if (cfg.equip[q])
+    return { n:base.v[q].n, c:base.v[q].c, ex:base, a:ANIM[id + "." + q] || ANIM[id] };
+  return { n:base.n, c:base.c, ex:base, a:ANIM[id] };
 }
 const liveSlots = r => r.slots.filter(id => !cfg.off[id]);
 const routineById = id => ROUTINES.find(r => r.id === id);
@@ -601,24 +784,49 @@ function renderEquip(){
 
 /* One toggle per exercise, shared across routines — an exercise you cannot do
    is one you cannot do wherever it appears. Listed under the first routine it
-   shows up in, with a note where it is reused. */
+   shows up in, with a note where it is reused.
+
+   Groups start collapsed. With thirty-nine toggles the sheet's job is "find
+   the one thing I can't do", not "read all of it"; the per-group counts carry
+   the information you would otherwise have to expand to get. */
+const GROUPS = [{ name:"Warm-up", thin:"Runs before every routine.", ids:WARMUP }]
+  .concat(ROUTINES.map(r => ({ name:r.name, thin:r.what, ids:r.slots, r })));
+
 function renderExercises(){
   const wrap = $("#exGroups"); wrap.innerHTML = "";
   const seen = {};
-  const groups = [{ name:"Warm-up", thin:"Runs before every routine.", ids:WARMUP }]
-    .concat(ROUTINES.map(r => ({ name:r.name, thin:r.what, ids:r.slots, r })));
 
-  groups.forEach(g => {
-    const fresh = g.ids.filter(id => !seen[id]);
+  GROUPS.forEach((g, gi) => {
+    const fresh  = g.ids.filter(id => !seen[id]);
     const reused = g.ids.filter(id => seen[id]);
     const div = document.createElement("div");
     div.className = "grp";
-    let head = `<h3>${g.name}</h3>`;
-    if (reused.length) {
-      const names = reused.map(id => resolve(id).n).join(", ");
-      head += `<p class="thin">Also uses ${names}, set above.</p>`;
+
+    const bodyId = "grp-" + gi;
+    const head = document.createElement("button");
+    head.type = "button"; head.className = "ghead";
+    head.setAttribute("aria-expanded", "false");
+    head.setAttribute("aria-controls", bodyId);
+    head.innerHTML = `<span class="gname">${g.name}</span>` +
+      `<span class="gright"><span class="gcount"></span><span class="chev"></span></span>`;
+    div.appendChild(head);
+
+    const warn = document.createElement("p");
+    warn.className = "warnrow"; warn.hidden = true;
+    div.appendChild(warn);
+
+    const body = document.createElement("div");
+    body.className = "gbody"; body.id = bodyId; body.hidden = true;
+    if (reused.length){
+      const names = reused.map(id => resolve(id).n);
+      const list = names.length > 1
+        ? names.slice(0, -1).join(", ") + " and " + names[names.length - 1]
+        : names[0];
+      const note = document.createElement("p");
+      note.className = "thin";
+      note.textContent = "Also uses " + list + ", set further up.";
+      body.appendChild(note);
     }
-    div.innerHTML = head;
 
     fresh.forEach(id => {
       seen[id] = true;
@@ -633,37 +841,45 @@ function renderExercises(){
       t.onclick = () => {
         if (cfg.off[id]) delete cfg.off[id]; else cfg.off[id] = true;
         t.setAttribute("aria-pressed", !cfg.off[id]);
-        persist(); renderRoutines(); refreshStart(); renderWarnings();
+        persist(); renderRoutines(); refreshStart(); refreshGroupMeta();
       };
-      row.appendChild(t); div.appendChild(row);
+      row.appendChild(t); body.appendChild(row);
     });
+
+    head.onclick = () => {
+      const open = head.getAttribute("aria-expanded") === "true";
+      head.setAttribute("aria-expanded", !open);
+      body.hidden = open;
+    };
+
+    div.appendChild(body);
+    div._meta = { g, warn, count: head.querySelector(".gcount") };
     wrap.appendChild(div);
   });
-  renderWarnings();
+  refreshGroupMeta();
 }
 
-/* A routine that cannot fill its slots should say so, not quietly serve the
-   same two exercises six times over. */
-function renderWarnings(){
-  document.querySelectorAll(".warnrow").forEach(n => n.remove());
-  const groups = [...document.querySelectorAll("#exGroups .grp")];
-  ROUTINES.forEach((r, i) => {
-    const live = liveSlots(r).length, g = groups[i + 1];
-    if (!g || live >= 3) return;
-    const p = document.createElement("p");
-    p.className = "warnrow";
-    p.textContent = live === 0
-      ? "Every exercise here is off, so this routine can't run."
-      : `Only ${live} left here. The session is still fifteen minutes, so ${live === 1 ? "it" : "they"} will come round every time.`;
-    g.appendChild(p);
+/* Counts and warnings both read from live state, so they stay right whether a
+   group is open or shut. */
+function refreshGroupMeta(){
+  [...document.querySelectorAll("#exGroups .grp")].forEach(div => {
+    const m = div._meta; if (!m) return;
+    const total = m.g.ids.length;
+    const on = m.g.ids.filter(id => !cfg.off[id]).length;
+    m.count.textContent = on === total ? total + " on" : on + " of " + total + " on";
+    m.count.classList.toggle("part", on !== total);
+
+    let msg = "";
+    if (m.g.r){
+      if (on === 0) msg = "Every exercise here is off, so this routine can't run.";
+      else if (on < 3) msg = "Only " + on + " left here. The session is still fifteen " +
+        "minutes, so " + (on === 1 ? "it" : "they") + " will come round every time.";
+    } else if (on === 0){
+      msg = "Every warm-up movement is off. The five minutes will be skipped — go carefully.";
+    }
+    m.warn.textContent = msg;
+    m.warn.hidden = !msg;
   });
-  const wl = WARMUP.filter(id => !cfg.off[id]).length;
-  if (wl === 0 && groups[0]) {
-    const p = document.createElement("p");
-    p.className = "warnrow";
-    p.textContent = "Every warm-up movement is off. The five minutes will be skipped — go carefully.";
-    groups[0].appendChild(p);
-  }
 }
 
 function refreshStart(){
@@ -700,7 +916,7 @@ function buildPlan(r){
   if (warm.length){
     const each = WARM_MS / warm.length;
     warm.forEach(id => { const x = resolve(id);
-      plan.push({ kind:"warm", name:x.n, cue:x.c, ms:each, phase:"Warm-up" }); });
+      plan.push({ kind:"warm", name:x.n, cue:x.c, ms:each, phase:"Warm-up", anim:x.a }); });
   }
 
   const live = liveSlots(r);
@@ -713,7 +929,7 @@ function buildPlan(r){
     live.forEach(id => {
       const x = resolve(id), sides = EX[id].sides || 1;
       for (let s = 0; s < sides; s++)
-        plan.push({ kind:"work", name:x.n, cue:x.c, ms:each, phase:"Hold",
+        plan.push({ kind:"work", name:x.n, cue:x.c, ms:each, phase:"Hold", anim:x.a,
                     side: sides === 2 ? (s === 0 ? "Left side" : "Right side") : "" });
     });
   } else {
@@ -721,7 +937,7 @@ function buildPlan(r){
        exercises means more repeats, never a shorter session. */
     for (let i = 0; i < WORK_SLOTS; i++){
       const id = live[i % live.length], x = resolve(id);
-      plan.push({ kind:"work", name:x.n, cue:x.c, ms:WORK_SLOT,
+      plan.push({ kind:"work", name:x.n, cue:x.c, ms:WORK_SLOT, anim:x.a, hideCue:true,
                   phase:"Round " + (Math.floor(i / live.length) + 1),
                   perSide: !!EX[id].perSide });
       const last = i === WORK_SLOTS - 1;
@@ -729,9 +945,13 @@ function buildPlan(r){
       /* The final rest is kept, not trimmed: it is the ten seconds you spend
          catching your breath before the summary, and dropping it would make
          the session 14:50 rather than 15:00. */
-      plan.push({ kind:"rest", name:last ? "Done" : "Rest", cue:"", ms:REST_SLOT,
+      /* The rest interval previews what is coming: its figure and its cue,
+         so the ten seconds are spent reading rather than waiting. */
+      const nr = last ? null : resolve(nx);
+      plan.push({ kind:"rest", name:last ? "Done" : "Rest", ms:REST_SLOT,
                   phase: last ? "Cool down" : "Rest",
-                  next: last ? null : resolve(nx).n, last:last });
+                  cue: nr ? nr.c : "", anim: nr ? nr.a : null,
+                  next: nr ? nr.n : null, last:last });
     }
   }
   return plan;
@@ -742,6 +962,69 @@ const S = { plan:[], i:0, start:0, slotStart:0, raf:0, wake:null,
             paused:false, pausedAt:0, lastTick:-1, sideDone:false, done:[] };
 
 const stage = $("#stage"), drain = $("#drain");
+
+/* ---------------- figure ----------------
+   Nine limb segments plus a head, redrawn each frame from an interpolated
+   pose. Reduced-motion holds the first frame rather than looping. */
+const NS = "http://www.w3.org/2000/svg";
+const SEG = [[1,2],[1,3],[3,4],[1,5],[5,6],[2,7],[7,8],[2,9],[9,10]];
+const figSvg = $("#figure"), figLimbs = [];
+let figHead = null, figProp = null, figAnim = null;
+
+(function buildFigure(){
+  const mk = (t, attrs, cls) => {
+    const el = document.createElementNS(NS, t);
+    el.setAttribute("class", cls);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  };
+  figSvg.appendChild(mk("line", {x1:0, y1:92, x2:120, y2:92}, "fl"));
+  figProp = mk("g", {}, "");
+  figSvg.appendChild(figProp);
+  for (let i = 0; i < SEG.length; i++){
+    const l = mk("line", {}, "lm"); figSvg.appendChild(l); figLimbs.push(l);
+  }
+  figHead = mk("circle", {r:7}, "lm");
+  figSvg.appendChild(figHead);
+  figSvg.__mk = mk;
+})();
+
+function setPose(a){
+  for (let k = 0; k < SEG.length; k++){
+    const i = SEG[k][0], j = SEG[k][1], l = figLimbs[k];
+    l.setAttribute("x1", a[i*2]); l.setAttribute("y1", a[i*2+1]);
+    l.setAttribute("x2", a[j*2]); l.setAttribute("y2", a[j*2+1]);
+  }
+  figHead.setAttribute("cx", a[0]); figHead.setAttribute("cy", a[1]);
+}
+
+const stillFigure = !!(window.matchMedia &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+function setFigure(anim){
+  figAnim = (anim && anim.f && anim.f.length && FIG[anim.f[0]]) ? anim : null;
+  while (figProp.firstChild) figProp.removeChild(figProp.firstChild);
+  figSvg.style.visibility = figAnim ? "visible" : "hidden";
+  if (!figAnim) return;
+  const prop = POSE_PROP[figAnim.f[0]];
+  if (prop && PROPS[prop]) figProp.appendChild(figSvg.__mk(PROPS[prop][0], PROPS[prop][1], "pr"));
+  setPose(FIG[figAnim.f[0]]);
+}
+
+const smooth = t => t * t * (3 - 2 * t);
+function animateFigure(now){
+  if (!figAnim || stillFigure) return;
+  const n = figAnim.f.length;
+  if (n < 2) return;
+  const per = figAnim.ms || 1500;
+  const ph = (now % per) / per * n;
+  const i = Math.floor(ph), t = smooth(ph - i);
+  const a = FIG[figAnim.f[i]], b = FIG[figAnim.f[(i + 1) % n]];
+  if (!a || !b) return;
+  const out = new Array(22);
+  for (let k = 0; k < 22; k++) out[k] = a[k] + (b[k] - a[k]) * t;
+  setPose(out);
+}
 
 function show(el, on){ el.classList.toggle("on", on); }
 
@@ -775,6 +1058,8 @@ function paintSlot(){
   $("#phaseLabel").textContent = s.phase;
   $("#exName").textContent = s.kind === "rest" ? (s.next ? "Next: " + s.next : "Done") : s.name;
   $("#cueText").textContent = s.cue || "";
+  $(".readout").classList.toggle("nocue", !!s.hideCue);
+  setFigure(s.anim);
   $("#switchCue").textContent = s.side || (s.perSide ? "Left side first" : "");
   $("#slotCount").textContent = pad2(S.i + 1) + " / " + pad2(S.plan.length);
   $("#nextUp").textContent = nextLabel();
@@ -799,6 +1084,7 @@ function tick(now){
   const p = Math.min(1, Math.max(0, el / s.ms));
 
   drain.style.transform = "scaleX(" + (1 - p).toFixed(4) + ")";
+  animateFigure(now);
 
   const secs = Math.max(0, Math.ceil(left / 1000));
   if (secs !== S.lastTick){
