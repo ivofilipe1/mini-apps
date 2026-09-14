@@ -12,6 +12,7 @@ Live at **[ivofilipe1.github.io/mini-apps](https://ivofilipe1.github.io/mini-app
 |---|---|---|
 | [tide](tide/) | Paced breathing timer: cyclic breaths, an open-ended breath hold, a timed recovery hold | [open](https://ivofilipe1.github.io/mini-apps/tide/) |
 | [trajectory](trajectory/) | Single-file weight and calorie tracker. Smooths the scale, fits your real energy expenditure from your own logs, and projects 90 days forward | [open](https://ivofilipe1.github.io/mini-apps/trajectory/) |
+| [heartquake](heartquake/) | Six fixed 15-minute bodyweight routines — 5 min warm-up, 10 min work. Compound exercises only, no equipment needed, remembers what you can't do | [open](https://ivofilipe1.github.io/mini-apps/heartquake/) |
 
 ## Conventions
 

@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#141217">
+<title>HeartQuake — bodyweight intervals</title>
+<meta name="description" content="Six fixed fifteen-minute bodyweight routines: five minutes of warm-up, ten minutes of work. No equipment required.">
+
+<!-- No external scripts, styles or fonts. Nothing is fetched, ever.
+     connect-src 'none' kills fetch, XHR and sendBeacon outright, so even if
+     markup were injected it could not send your settings anywhere.
+     'unsafe-inline' is required because the script and styles live in this one
+     file; it still blocks every external origin. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+
+<style>
+:root{
+  --ink:#141217;
+  --ink-2:#1c1920;
+  --bone:#ece7dd;
+  --bone-dim:#a79f96;
+  /* --faint is 4.6:1 on --ink. The obvious warm grey for micro-labels sits at
+     3.1:1 and fails AA at these sizes; this one is two steps lighter. */
+  --faint:#857d73;
+  --line:#2c2830;
+  --line-hi:#443d4c;
+  --pulse:#d4705f;                    /* work   — 5.6:1 on ink */
+  --pulse-fill:rgba(212,112,95,.17);
+  --rest:#7f9e7a;                     /* rest   — 6.3:1 on ink */
+  --rest-fill:rgba(127,158,122,.15);
+  --warm:#c08457;                     /* warm-up and cautions */
+  --warm-fill:rgba(192,132,87,.14);
+  --shell:720px;
+  --gut:clamp(22px,4.5vw,44px);
+  /* Device fonts only: no webfont request, no flash, the file stays standalone.
+     The design needs the contrast between a neutral sans and a spoken serif
+     italic, not one specific face. */
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --serif:Georgia,'Iowan Old Style','Palatino Linotype','Noto Serif',serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:#0d0c10;color:var(--bone);
+  font-family:var(--sans);font-weight:400;line-height:1.5;
+  display:flex;justify-content:center;overscroll-behavior:none;
+}
+.shell{
+  width:100%;max-width:var(--shell);background:var(--ink);
+  min-height:100vh;min-height:100dvh;
+  display:flex;flex-direction:column;position:relative;overflow:hidden;
+}
+
+/* ---------- masthead ---------- */
+.masthead{
+  padding:calc(26px + env(safe-area-inset-top)) var(--gut) 0;
+  display:flex;align-items:baseline;gap:12px;flex:0 0 auto;
+}
+.mark{font-family:var(--serif);font-style:italic;font-weight:400;
+  font-size:clamp(25px,3.4vw,33px);letter-spacing:-.4px}
+.tagline{font-size:11px;letter-spacing:1.9px;text-transform:uppercase;color:var(--faint)}
+
+.scroll{flex:1;overflow-y:auto;padding:0 var(--gut) 30px;-webkit-overflow-scrolling:touch}
+
+/* ---------- caution ---------- */
+.caution{
+  margin:26px 0 8px;padding-left:15px;border-left:2px solid var(--warm);
+  font-size:12.5px;line-height:1.62;color:#b9ada0;max-width:64ch;
+}
+.caution b{display:block;font-family:var(--serif);font-style:italic;font-weight:400;
+  font-size:15px;color:var(--warm);margin-bottom:5px;letter-spacing:0}
+
+/* ---------- blocks ---------- */
+.block{padding:26px 0;border-bottom:1px solid var(--line)}
+.block:last-of-type{border-bottom:0}
+.kicker{font-size:10.5px;letter-spacing:2.1px;text-transform:uppercase;color:var(--faint);margin:0 0 3px}
+.title{font-family:var(--serif);font-style:italic;font-weight:400;font-size:20px;
+  margin:0 0 2px;letter-spacing:-.2px}
+.sub{font-size:12.5px;color:var(--bone-dim);margin:0 0 15px;line-height:1.5;max-width:62ch}
+
+/* ---------- routine cards ---------- */
+.routines{list-style:none;margin:0;padding:0}
+.rt{
+  width:100%;display:block;text-align:left;font:inherit;cursor:pointer;
+  background:var(--ink-2);border:1px solid var(--line);border-radius:4px;
+  padding:15px 17px;margin-bottom:9px;color:inherit;
+  transition:border-color .15s,background .15s;
+}
+.rt:hover{border-color:var(--line-hi)}
+.rt:focus-visible{outline:2px solid var(--pulse);outline-offset:2px}
+.rt[aria-pressed="true"]{border-color:var(--pulse);background:var(--pulse-fill)}
+.rt:disabled{cursor:not-allowed;opacity:.42}
+.rt:disabled:hover{border-color:var(--line)}
+.rt .rtop{display:flex;align-items:baseline;justify-content:space-between;gap:14px}
+.rt .rname{font-family:var(--serif);font-style:italic;font-size:19px;letter-spacing:-.2px}
+.rt .rtrains{font-size:11.5px;color:var(--bone-dim);white-space:nowrap}
+.rt .rwhat{font-size:12.5px;color:var(--bone-dim);margin:5px 0 0}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.badge{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;
+  border:1px solid var(--line-hi);border-radius:2px;padding:3px 8px;color:var(--faint)}
+.badge.hi{color:var(--pulse);border-color:var(--pulse)}
+.badge.lock{color:var(--warm);border-color:var(--warm)}
+
+/* ---------- switch rows ---------- */
+.sw{display:flex;align-items:center;gap:16px;padding:12px 0}
+.sw + .sw{border-top:1px solid var(--line)}
+.sw .name{flex:1;font-size:14.5px}
+.sw .name em{display:block;font-style:normal;font-size:11.5px;color:var(--faint);
+  margin-top:3px;line-height:1.45}
+.tgl{
+  appearance:none;border:0;cursor:pointer;flex:0 0 auto;
+  width:44px;height:22px;border-radius:22px;background:#3a3540;position:relative;
+  transition:background .18s;
+}
+.tgl::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;
+  border-radius:50%;background:var(--bone);transition:transform .18s cubic-bezier(.3,1.3,.5,1)}
+.tgl[aria-pressed="true"]{background:var(--pulse)}
+.tgl[aria-pressed="true"]::after{transform:translateX(22px);background:var(--ink)}
+.tgl:focus-visible{outline:2px solid var(--pulse);outline-offset:3px}
+
+/* ---------- buttons ---------- */
+.go{
+  width:100%;appearance:none;border:0;cursor:pointer;font:inherit;
+  background:var(--bone);color:var(--ink);font-size:15px;font-weight:600;
+  letter-spacing:1.4px;text-transform:uppercase;
+  padding:20px 0;border-radius:2px;margin-top:30px;transition:opacity .15s;
+}
+.go:hover{opacity:.87}
+.go:focus-visible{outline:2px solid var(--pulse);outline-offset:3px}
+.go:disabled{opacity:.35;cursor:not-allowed}
+.go.quiet{background:none;border:1px solid var(--line);color:var(--bone-dim);
+  font-weight:400;padding:15px 0;margin-top:10px}
+.go.quiet:hover{border-color:var(--line-hi);color:var(--bone);opacity:1}
+
+/* ---------- exercise list (overlay) ---------- */
+.sheet{position:fixed;inset:0;background:var(--ink);z-index:30;display:none;flex-direction:column}
+.sheet.on{display:flex}
+.sheettop{
+  display:flex;justify-content:space-between;align-items:center;gap:14px;
+  padding:calc(24px + env(safe-area-inset-top)) var(--gut) 16px;
+  border-bottom:1px solid var(--line);flex:0 0 auto;
+}
+.sheettop h2{font-family:var(--serif);font-style:italic;font-weight:400;font-size:21px;margin:0}
+.sheettop button{background:none;border:0;color:var(--faint);font:inherit;font-size:11px;
+  letter-spacing:2px;text-transform:uppercase;cursor:pointer;padding:6px 0}
+.sheettop button:hover{color:var(--bone)}
+.sheetbody{flex:1;overflow-y:auto;padding:0 var(--gut) calc(34px + env(safe-area-inset-bottom))}
+.grp{margin-top:26px}
+.grp h3{font-size:10.5px;letter-spacing:2.1px;text-transform:uppercase;color:var(--faint);
+  font-weight:400;margin:0 0 2px}
+.grp .thin{font-size:12px;color:var(--faint);margin:0 0 6px}
+.warnrow{margin:8px 0 0;padding-left:13px;border-left:2px solid var(--warm);
+  font-size:12px;color:#b9ada0;line-height:1.55}
+
+/* ---------- session ---------- */
+.session{position:fixed;inset:0;background:var(--ink);z-index:20;display:none;flex-direction:column}
+.session.on{display:flex}
+.sesstop{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:calc(24px + env(safe-area-inset-top)) var(--gut) 0;
+  font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);
+  position:relative;z-index:3;
+}
+.sesstop .count{font-variant-numeric:tabular-nums}
+.sesstop button{background:none;border:0;color:var(--faint);font:inherit;font-size:11px;
+  letter-spacing:2px;text-transform:uppercase;cursor:pointer;padding:6px 0}
+.sesstop button:hover{color:var(--bone)}
+
+/* The stage drains left to right over the current interval, so how much of the
+   slot is left is readable from across the room without reading the number. */
+.stage{flex:1;position:relative;overflow:hidden;display:grid;place-items:center;cursor:pointer}
+.drain{position:absolute;inset:0;width:100%;transform-origin:left center;
+  background:var(--pulse-fill);will-change:transform}
+.stage.rest .drain{background:var(--rest-fill)}
+.stage.warm .drain{background:var(--warm-fill)}
+.readout{position:relative;z-index:2;text-align:center;padding:0 var(--gut);
+  max-width:min(640px,94vw)}
+.phase{font-size:11px;letter-spacing:2.4px;text-transform:uppercase;color:var(--pulse);
+  min-height:16px}
+.stage.rest .phase{color:var(--rest)}
+.stage.warm .phase{color:var(--warm)}
+.exname{font-family:var(--serif);font-style:italic;font-weight:400;
+  font-size:clamp(29px,5.6vw,50px);line-height:1.12;margin:9px 0 0;letter-spacing:-.5px}
+.num{font-size:clamp(66px,13vw,150px);font-weight:300;line-height:1;
+  font-variant-numeric:tabular-nums;letter-spacing:-.03em;margin-top:clamp(4px,1vw,12px)}
+.cue{font-size:14px;color:var(--bone-dim);margin:clamp(6px,1.2vw,14px) auto 0;max-width:44ch;
+  min-height:21px}
+.switch{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--pulse);
+  margin-top:9px;min-height:18px}
+.rule{height:1px;background:var(--line);position:relative;z-index:3}
+.rule i{position:absolute;inset:0 auto 0 0;width:0;background:var(--bone);display:block}
+.sessfoot{padding:15px var(--gut) calc(20px + env(safe-area-inset-bottom));
+  display:flex;justify-content:space-between;gap:14px;
+  font-size:11.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--faint);
+  position:relative;z-index:3}
+.paused .num{opacity:.4}
+
+/* ---------- summary ---------- */
+.summary{position:fixed;inset:0;background:var(--ink);z-index:25;display:none}
+.summary.on{display:flex}
+.sumwrap{padding:0 var(--gut) calc(26px + env(safe-area-inset-bottom));display:flex;
+  flex-direction:column;height:100%;width:100%;max-width:640px;margin-inline:auto}
+.sumwrap .body{flex:1;overflow-y:auto;padding-top:clamp(26px,7vh,60px)}
+.summary h2{font-family:var(--serif);font-style:italic;font-weight:400;
+  font-size:clamp(29px,3.6vw,40px);margin:0 0 4px;letter-spacing:-.4px}
+.summary .lede{color:var(--bone-dim);font-size:13px;margin:0 0 22px}
+.stats{display:flex;gap:28px;flex-wrap:wrap;margin:0 0 8px}
+.stat .v{font-size:30px;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat .k{font-size:10.5px;letter-spacing:1.8px;text-transform:uppercase;color:var(--faint);margin-top:3px}
+.did{list-style:none;margin:22px 0 0;padding:0}
+.did li{display:flex;align-items:baseline;gap:14px;padding:11px 0;border-bottom:1px solid var(--line);
+  font-size:14px}
+.did .n{font-size:11px;letter-spacing:1.8px;color:var(--faint);font-variant-numeric:tabular-nums;
+  min-width:22px}
+.did .x{flex:1}
+.did .r{font-size:11.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+
+footer.foot{margin-top:34px;padding-top:20px;border-top:1px solid var(--line);
+  font-size:12px;color:var(--faint);line-height:1.6}
+
+@media (prefers-reduced-motion:reduce){.drain{transition:none}}
+@media (max-height:560px){
+  .exname{font-size:clamp(21px,4.4vh,30px)}
+  .num{font-size:clamp(44px,11vh,74px)}
+  .cue{font-size:12.5px;min-height:18px}
+  .sesstop{padding-top:calc(11px + env(safe-area-inset-top))}
+  .sessfoot{padding-top:10px;padding-bottom:calc(11px + env(safe-area-inset-bottom))}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="masthead">
+    <span class="mark">HeartQuake</span>
+    <span class="tagline">bodyweight intervals</span>
+  </div>
+
+  <div class="scroll" id="settings">
+
+    <div class="caution">
+      <b>Before you start</b>
+      Warm up first — the app makes you, so do not skip it. Stop if something
+      sharp or one-sided starts hurting; muscle burn is fine, joint pain is not.
+      This is a timer, not a coach: it cannot see your form. Get medical clearance
+      first if you are pregnant, recovering from injury, or have a heart condition.
+      Nothing here is medical advice.
+    </div>
+
+    <div class="block">
+      <p class="kicker">01 · Routine</p>
+      <h2 class="title">What you are training today</h2>
+      <p class="sub">Every routine is the same shape: five minutes of warm-up, ten
+        minutes of work. Balance comes from rotating across routines over a week,
+        not from balancing inside one session.</p>
+      <div class="routines" id="routineList" role="group" aria-label="Routine"></div>
+    </div>
+
+    <div class="block">
+      <p class="kicker">02 · Equipment</p>
+      <h2 class="title">What you have to hand</h2>
+      <p class="sub">Everything runs with nothing at all. Each item you have swaps
+        one exercise for a better version of it.</p>
+      <div id="equipList"></div>
+    </div>
+
+    <div class="block">
+      <p class="kicker">03 · Cues</p>
+      <h2 class="title">What you hear and feel</h2>
+      <div class="sw">
+        <div class="name">Sound<em>Countdown beeps, and a tone on every change</em></div>
+        <button class="tgl" id="tglSound" aria-pressed="true" aria-label="Sound"></button>
+      </div>
+      <div class="sw">
+        <div class="name">Vibration<em id="hapticNote">Android only. iOS browsers do not vibrate.</em></div>
+        <button class="tgl" id="tglHaptic" aria-pressed="true" aria-label="Vibration"></button>
+      </div>
+    </div>
+
+    <button class="go" id="startBtn">Begin</button>
+    <button class="go quiet" id="exBtn">Exercises I can't do</button>
+
+    <footer class="foot">
+      Everything you set here stays in this browser. Nothing is sent anywhere,
+      and there is no account to make.
+    </footer>
+
+  </div>
+
+  <!-- ===================== EXERCISE TOGGLES ===================== -->
+  <div class="sheet" id="exSheet">
+    <div class="sheettop">
+      <h2>Exercises</h2>
+      <button type="button" id="exDone">Done</button>
+    </div>
+    <div class="sheetbody">
+      <p class="sub" style="margin-top:20px">Turn off anything you can't do, for
+        whatever reason. No reason is asked for and none is stored. What's left
+        fills the same fifteen minutes.</p>
+      <div id="exGroups"></div>
+    </div>
+  </div>
+
+  <!-- ===================== SESSION ===================== -->
+  <div class="session" id="session">
+    <div class="sesstop">
+      <span id="routineLabel">—</span>
+      <span class="count" id="slotCount">—</span>
+      <button type="button" id="quitBtn">End</button>
+    </div>
+    <div class="stage" id="stage">
+      <div class="drain" id="drain"></div>
+      <div class="readout">
+        <div class="phase" id="phaseLabel">—</div>
+        <div class="exname" id="exName">—</div>
+        <div class="num" id="bigNum">0</div>
+        <div class="cue" id="cueText"></div>
+        <div class="switch" id="switchCue"></div>
+      </div>
+    </div>
+    <div class="rule"><i id="progress"></i></div>
+    <div class="sessfoot">
+      <span id="nextUp"></span>
+      <span id="timeLeft"></span>
+    </div>
+  </div>
+
+  <!-- ===================== SUMMARY ===================== -->
+  <div class="summary" id="summaryView">
+    <div class="sumwrap">
+      <div class="body">
+        <h2 id="sumTitle">Done</h2>
+        <p class="lede" id="sumLede">—</p>
+        <div class="stats">
+          <div class="stat"><div class="v" id="sumTime">—</div><div class="k">Elapsed</div></div>
+          <div class="stat"><div class="v" id="sumWork">—</div><div class="k">Working</div></div>
+          <div class="stat"><div class="v" id="sumCount">—</div><div class="k">Intervals</div></div>
+        </div>
+        <ul class="did" id="didList"></ul>
+      </div>
+      <button class="go" id="againBtn">Go again</button>
+      <button class="go quiet" id="backBtn">Back</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ------------------------------------------------------------------
+   HeartQuake — six fixed fifteen-minute bodyweight routines.
+
+   Shape: 5 min warm-up, then 10 min of work. The work block is always
+   twelve 50-second slots (40 on, 10 off), so the session is 15:00
+   whether six exercises are available or two — fewer exercises means
+   each one comes round more often, not a shorter workout.
+
+   Routine 2 overrides this: stretching is held, not intervalled, so the
+   ten minutes is divided evenly across side-slots instead.
+------------------------------------------------------------------- */
+
+const WARM_MS   = 300000;   /* 5 min  */
+const WORK_MS   = 600000;   /* 10 min */
+const WORK_SLOT = 40000;
+const REST_SLOT = 10000;
+const WORK_SLOTS = WORK_MS / (WORK_SLOT + REST_SLOT);   /* 12 */
+
+/* ---------------- exercises ----------------
+   base = the version that needs nothing. `on` names the equipment toggle
+   that swaps it for the better version. sides:2 means the stretch is held
+   per side; perSide means a mid-interval switch inside one 40s slot. */
+const EX = {
+  /* warm-up */
+  jacks:      {n:"Jumping jacks",        c:"Light and springy. You are raising your temperature, not training.",
+               v:{rope:{n:"Jump rope", c:"Small bounces, wrists doing the work, elbows in."}}},
+  armcircle:  {n:"Arm circles",          c:"Small to large, forward, then the same backwards."},
+  wrists:     {n:"Wrist circles & rocks",c:"Circles both ways. Then palms flat on the floor, rock forward and back."},
+  legswing:   {n:"Leg swings",           c:"Hold something. Front to back, then across the body."},
+  hipcircle:  {n:"Hip circles",          c:"Hands on hips, big slow circles, both directions."},
+  inchworm:   {n:"Inchworm",             c:"Walk the hands out to a plank, walk the feet back in."},
+
+  /* ground & up */
+  burpee:     {n:"Burpee",               c:"Chest to the floor, jump at the top."},
+  plankpush:  {n:"Plank to push-up",     c:"Elbow, elbow, hand, hand. Keep the hips still."},
+  mtnclimb:   {n:"Mountain climber",     c:"Hips low, knees driving to the chest."},
+  jumplunge:  {n:"Jumping lunge",        c:"Swap feet in the air. Land soft and quiet."},
+  skater:     {n:"Skater bound",         c:"Bound side to side, land on one leg, hold a beat."},
+  pushup:     {n:"Push-up",              c:"Elbows at 45°, body in one straight line."},
+
+  /* stretch */
+  worlds:     {n:"World's greatest stretch", sides:2,
+               c:"Deep lunge, elbow inside the front foot, then open the chest to the ceiling."},
+  deepsquat:  {n:"Deep squat hold",      sides:1, c:"Heels down, elbows inside the knees, chest up."},
+  hipflexor:  {n:"Kneeling hip flexor",  sides:2, c:"Squeeze the back glute. Do not arch the lower back.",
+               v:{wall:{n:"Couch stretch", c:"Back foot up the wall, front foot forward. Go slowly, this one bites."}}},
+  fold:       {n:"Forward fold",         sides:1, c:"Soft knees. Let the head and arms hang heavy."},
+  openbook:   {n:"Open book",            sides:2, c:"On your side, knees stacked, follow the top hand with your eyes.",
+               v:{roll:{n:"Thoracic roll-out", c:"Roller under the upper back, ribs down, roll slowly."}}},
+  pigeon:     {n:"Pigeon",               sides:2, c:"Front shin angled, hips square, fold forward over it.",
+               v:{roll:{n:"Glute roll-out", c:"Sit on the roller, ankle on the opposite knee, find the sore spot."}}},
+
+  /* single side */
+  revlunge:   {n:"Reverse lunge",        c:"Step back, back knee to the floor, front shin vertical. Alternate."},
+  cossack:    {n:"Cossack squat",        c:"Shift side to side. One knee bends, the other leg stays straight."},
+  splitsq:    {n:"Split squat",          perSide:true, c:"Feet split wide. Straight up and down, not forward."},
+  slrdl:      {n:"Single-leg RDL",       perSide:true, c:"Hinge at the hip. Back leg and spine make one line."},
+  slbridge:   {n:"Single-leg glute bridge", perSide:true, c:"Drive through the heel. Keep the hips level at the top."},
+  sideplank:  {n:"Side plank + hip dip", perSide:true, c:"Elbow under the shoulder. Lower the hip, then lift it."},
+
+  /* hinge & hold */
+  bridge:     {n:"Glute bridge",         c:"Heels close, squeeze hard at the top, ribs down."},
+  goodmorn:   {n:"Good morning",         c:"Hands behind the head, hinge back, knees soft, back flat."},
+  superman:   {n:"Superman",             c:"Lift chest and thighs. Look at the floor, not forward."},
+  revplank:   {n:"Reverse plank",        c:"Fingers pointing at your feet, hips up, chest open."},
+  hollow:     {n:"Hollow hold",          c:"Lower back pressed into the floor. Nothing else matters."},
+  ytw:        {n:"Prone Y-T-W",          c:"Face down, thumbs up. Lift the arms through Y, then T, then W."},
+
+  /* bar */
+  pullup:     {n:"Pull-up",              c:"Full hang at the bottom. Chest toward the bar."},
+  kneeraise:  {n:"Hanging knee raise",   c:"Knees to the chest. No swinging."},
+  scappull:   {n:"Scapular pull",        c:"Arms stay straight. Pull the shoulders down and back only."},
+  squatjump:  {n:"Squat jump",           c:"Land quiet, and go straight back down into the next one."},
+
+  /* upper */
+  pike:       {n:"Pike push-up",         c:"Hips high, crown of the head toward the floor.",
+               v:{wall:{n:"Wall walk", c:"Feet up the wall, walk the hands in. Come down before you have to."}}},
+  archer:     {n:"Archer push-up",       perSide:true, c:"Wide hands. Bend one arm, the other stays straight."},
+  shoulder:   {n:"Shoulder taps",        c:"Plank, feet wide, tap the opposite shoulder without rocking.",
+               v:{surface:{n:"Dip", c:"Hands on the edge behind you, elbows straight back, not flared."}}},
+  bearcrawl:  {n:"Bear crawl",           c:"Knees an inch off the floor. Opposite hand, opposite foot."},
+  supermanrow:{n:"Superman row",         c:"Face down, chest up, pull the elbows to the ribs and squeeze.",
+               v:{band:{n:"Band row", c:"Band round the feet, elbows to the ribs, squeeze the shoulder blades."}}}
+};
+
+const WARMUP = ["jacks","armcircle","wrists","legswing","hipcircle","inchworm"];
+
+const ROUTINES = [
+  {id:"ground", name:"Ground & Up", trains:"Legs, push, core", impact:"High impact", hr:"High HR",
+   what:"Floor to standing, over and over. The one that actually spikes your heart rate.",
+   slots:["burpee","plankpush","mtnclimb","jumplunge","skater","pushup"]},
+
+  {id:"stretch", name:"Stretch", trains:"Mobility", impact:"No impact", hr:"",
+   what:"Ten minutes of held positions. No intervals, no jumping, no breathing hard.",
+   hold:true, slots:["worlds","deepsquat","hipflexor","fold","openbook","pigeon"]},
+
+  {id:"single", name:"Single Side", trains:"Legs, balance", impact:"Low impact", hr:"Moderate HR",
+   what:"One leg at a time. Lower heart rate, much higher demand per limb — this is where you find out one side is weaker.",
+   slots:["revlunge","cossack","splitsq","slrdl","slbridge","sideplank"]},
+
+  {id:"hinge", name:"Hinge & Hold", trains:"Back, glutes, core", impact:"No impact", hr:"Low HR",
+   what:"Everything the other routines skip: posterior chain, spinal extension, shoulder blades. Quiet and floor-based.",
+   slots:["bridge","goodmorn","superman","revplank","hollow","ytw"]},
+
+  {id:"bar", name:"Bar", trains:"Back, biceps, core", impact:"Low impact", hr:"Moderate HR",
+   what:"The only real pulling in the app. Alternates bar and floor on purpose — grip fails long before cardio does.",
+   needs:"bar", slots:["pullup","kneeraise","scappull","burpee","mtnclimb","squatjump"]},
+
+  {id:"upper", name:"Upper", trains:"Chest, shoulders, triceps", impact:"Low impact", hr:"Moderate HR",
+   what:"Pushing, in every direction. Needs nothing, so it stands in for Bar when there is no bar.",
+   slots:["pushup","pike","archer","shoulder","bearcrawl","supermanrow"]}
+];
+
+const EQUIP = [
+  {id:"bar",     n:"Pull-up bar",    e:"Unlocks the Bar routine"},
+  {id:"band",    n:"Elastic band",   e:"Band row instead of Superman row"},
+  {id:"surface", n:"Stable surface", e:"A chair, step or couch edge — dips instead of shoulder taps"},
+  {id:"wall",    n:"Wall",           e:"Wall walks, and a deeper hip flexor stretch"},
+  {id:"rope",    n:"Jump rope",      e:"Replaces jumping jacks in the warm-up"},
+  {id:"roll",    n:"Foam roller",    e:"Rolling instead of two of the stretches"}
+];
+
+/* ---------------- helpers ---------------- */
+const $ = s => document.querySelector(s);
+const pad2 = n => String(n).padStart(2,"0");
+const fmt = ms => { const s = Math.max(0, Math.round(ms/1000)); return Math.floor(s/60)+":"+pad2(s%60); };
+
+/* ---------------- storage ----------------
+   Preferences only: which routine, what equipment, what you cannot do.
+   No session history, no dates, nothing about your body. Behind a probe so a
+   browser with storage blocked degrades to in-memory instead of throwing. */
+const Store = (() => {
+  const KEY = "heartquake.v1"; let usable = true, memory = null;
+  try { localStorage.setItem(KEY+".probe","1"); localStorage.removeItem(KEY+".probe"); }
+  catch(e){ usable = false; }
+  return {
+    load(){ if(!usable) return memory;
+      try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; } catch(e){ return null; } },
+    save(o){ if(!usable){ memory = o; return; }
+      try { localStorage.setItem(KEY, JSON.stringify(o)); } catch(e){ usable = false; memory = o; } }
+  };
+})();
+
+const cfg = { routine:"ground", equip:{}, off:{}, sound:true, haptic:true };
+(function restore(){
+  const s = Store.load(); if (!s) return;
+  if (typeof s.routine === "string") cfg.routine = s.routine;
+  if (s.equip && typeof s.equip === "object") EQUIP.forEach(q => { cfg.equip[q.id] = !!s.equip[q.id]; });
+  /* Only ids this build still knows about — a stale key must not silently
+     disable an exercise that has since been renamed. */
+  if (Array.isArray(s.off)) s.off.forEach(id => { if (EX[id]) cfg.off[id] = true; });
+  if (typeof s.sound === "boolean") cfg.sound = s.sound;
+  if (typeof s.haptic === "boolean") cfg.haptic = s.haptic;
+  if (!ROUTINES.some(r => r.id === cfg.routine)) cfg.routine = "ground";
+})();
+function persist(){
+  Store.save({ routine:cfg.routine, equip:cfg.equip,
+               off:Object.keys(cfg.off).filter(k => cfg.off[k]),
+               sound:cfg.sound, haptic:cfg.haptic });
+}
+
+/* variant resolution: base exercise unless the equipment it wants is on */
+function resolve(id){
+  const base = EX[id]; if (!base) return null;
+  if (base.v) for (const q in base.v) if (cfg.equip[q]) return { n:base.v[q].n, c:base.v[q].c, ex:base };
+  return { n:base.n, c:base.c, ex:base };
+}
+const liveSlots = r => r.slots.filter(id => !cfg.off[id]);
+const routineById = id => ROUTINES.find(r => r.id === id);
+const available = r => !r.needs || cfg.equip[r.needs];
+
+/* ---------------- audio ----------------
+   Synthesised on the fly. Nothing is loaded, so there is no file to fetch
+   and no delay before the first beep. */
+let actx = null;
+function audio(){
+  if (!actx){ const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; actx = new AC(); }
+  if (actx.state === "suspended") actx.resume();
+  return actx;
+}
+function beep(freq, dur, amp){
+  if (!cfg.sound) return;
+  const c = audio(); if (!c) return;
+  const t = c.currentTime, o = c.createOscillator(), g = c.createGain();
+  o.type = "sine"; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(amp, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.05);
+}
+const tone = {
+  tick:  () => beep(660, 0.10, 0.16),
+  work:  () => beep(880, 0.40, 0.22),
+  rest:  () => beep(440, 0.40, 0.18),
+  side:  () => { beep(760, 0.14, 0.20); setTimeout(() => beep(760, 0.14, 0.20), 170); },
+  done:  () => { [523,659,784].forEach((f,i) => setTimeout(() => beep(f, 1.1, 0.18), i*130)); }
+};
+/* Distinguishable in a pocket without looking: one long, two short, three. */
+const BUZZ = { work:[60], rest:[20,70,20], side:[30,50,30], done:[80,90,80,90,160] };
+function buzz(kind){
+  if (!cfg.haptic || !navigator.vibrate) return;
+  navigator.vibrate(BUZZ[kind]);
+}
+
+/* ---------------- settings UI ---------------- */
+function renderRoutines(){
+  const wrap = $("#routineList"); wrap.innerHTML = "";
+  ROUTINES.forEach(r => {
+    const ok = available(r), live = liveSlots(r).length;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "rt";
+    b.setAttribute("aria-pressed", cfg.routine === r.id && ok);
+    b.disabled = !ok || live === 0;
+    const badges = [];
+    if (r.impact) badges.push(`<span class="badge${/High/.test(r.impact) ? " hi" : ""}">${r.impact}</span>`);
+    if (r.hr) badges.push(`<span class="badge">${r.hr}</span>`);
+    if (!ok) badges.push(`<span class="badge lock">Needs a pull-up bar</span>`);
+    else if (live === 0) badges.push(`<span class="badge lock">Every exercise turned off</span>`);
+    else if (live < 3) badges.push(`<span class="badge lock">Only ${live} exercises left</span>`);
+    b.innerHTML =
+      `<span class="rtop"><span class="rname">${r.name}</span>` +
+      `<span class="rtrains">${r.trains}</span></span>` +
+      `<p class="rwhat">${r.what}</p>` +
+      `<span class="badges">${badges.join("")}</span>`;
+    b.onclick = () => { cfg.routine = r.id; persist(); renderRoutines(); refreshStart(); };
+    wrap.appendChild(b);
+  });
+}
+
+function renderEquip(){
+  const wrap = $("#equipList"); wrap.innerHTML = "";
+  EQUIP.forEach(q => {
+    const row = document.createElement("div");
+    row.className = "sw";
+    row.innerHTML = `<div class="name">${q.n}<em>${q.e}</em></div>`;
+    const t = document.createElement("button");
+    t.className = "tgl"; t.type = "button";
+    t.setAttribute("aria-pressed", !!cfg.equip[q.id]);
+    t.setAttribute("aria-label", q.n);
+    t.onclick = () => {
+      cfg.equip[q.id] = !cfg.equip[q.id];
+      t.setAttribute("aria-pressed", !!cfg.equip[q.id]);
+      persist(); renderRoutines(); renderExercises(); refreshStart();
+    };
+    row.appendChild(t); wrap.appendChild(row);
+  });
+}
+
+/* One toggle per exercise, shared across routines — an exercise you cannot do
+   is one you cannot do wherever it appears. Listed under the first routine it
+   shows up in, with a note where it is reused. */
+function renderExercises(){
+  const wrap = $("#exGroups"); wrap.innerHTML = "";
+  const seen = {};
+  const groups = [{ name:"Warm-up", thin:"Runs before every routine.", ids:WARMUP }]
+    .concat(ROUTINES.map(r => ({ name:r.name, thin:r.what, ids:r.slots, r })));
+
+  groups.forEach(g => {
+    const fresh = g.ids.filter(id => !seen[id]);
+    const reused = g.ids.filter(id => seen[id]);
+    const div = document.createElement("div");
+    div.className = "grp";
+    let head = `<h3>${g.name}</h3>`;
+    if (reused.length) {
+      const names = reused.map(id => resolve(id).n).join(", ");
+      head += `<p class="thin">Also uses ${names}, set above.</p>`;
+    }
+    div.innerHTML = head;
+
+    fresh.forEach(id => {
+      seen[id] = true;
+      const r = resolve(id);
+      const row = document.createElement("div");
+      row.className = "sw";
+      row.innerHTML = `<div class="name">${r.n}<em>${r.c}</em></div>`;
+      const t = document.createElement("button");
+      t.className = "tgl"; t.type = "button";
+      t.setAttribute("aria-pressed", !cfg.off[id]);
+      t.setAttribute("aria-label", r.n);
+      t.onclick = () => {
+        if (cfg.off[id]) delete cfg.off[id]; else cfg.off[id] = true;
+        t.setAttribute("aria-pressed", !cfg.off[id]);
+        persist(); renderRoutines(); refreshStart(); renderWarnings();
+      };
+      row.appendChild(t); div.appendChild(row);
+    });
+    wrap.appendChild(div);
+  });
+  renderWarnings();
+}
+
+/* A routine that cannot fill its slots should say so, not quietly serve the
+   same two exercises six times over. */
+function renderWarnings(){
+  document.querySelectorAll(".warnrow").forEach(n => n.remove());
+  const groups = [...document.querySelectorAll("#exGroups .grp")];
+  ROUTINES.forEach((r, i) => {
+    const live = liveSlots(r).length, g = groups[i + 1];
+    if (!g || live >= 3) return;
+    const p = document.createElement("p");
+    p.className = "warnrow";
+    p.textContent = live === 0
+      ? "Every exercise here is off, so this routine can't run."
+      : `Only ${live} left here. The session is still fifteen minutes, so ${live === 1 ? "it" : "they"} will come round every time.`;
+    g.appendChild(p);
+  });
+  const wl = WARMUP.filter(id => !cfg.off[id]).length;
+  if (wl === 0 && groups[0]) {
+    const p = document.createElement("p");
+    p.className = "warnrow";
+    p.textContent = "Every warm-up movement is off. The five minutes will be skipped — go carefully.";
+    groups[0].appendChild(p);
+  }
+}
+
+function refreshStart(){
+  const r = routineById(cfg.routine);
+  $("#startBtn").disabled = !r || !available(r) || liveSlots(r).length === 0;
+}
+
+function bindToggle(sel, key){
+  const el = $(sel);
+  el.setAttribute("aria-pressed", cfg[key]);
+  el.onclick = () => { cfg[key] = el.getAttribute("aria-pressed") !== "true";
+    el.setAttribute("aria-pressed", cfg[key]); persist(); };
+}
+bindToggle("#tglSound","sound");
+bindToggle("#tglHaptic","haptic");
+if (!navigator.vibrate){
+  cfg.haptic = false;
+  $("#tglHaptic").setAttribute("aria-pressed","false");
+  $("#tglHaptic").disabled = true;
+  $("#hapticNote").textContent = "This browser cannot vibrate.";
+}
+
+renderRoutines(); renderEquip(); renderExercises(); refreshStart();
+
+$("#exBtn").onclick  = () => { renderExercises(); $("#exSheet").classList.add("on"); };
+$("#exDone").onclick = () => $("#exSheet").classList.remove("on");
+
+/* ---------------- the plan ----------------
+   Built up front as a flat list of intervals so the engine only has to walk
+   an array. Total is always exactly 15:00. */
+function buildPlan(r){
+  const plan = [];
+  const warm = WARMUP.filter(id => !cfg.off[id]);
+  if (warm.length){
+    const each = WARM_MS / warm.length;
+    warm.forEach(id => { const x = resolve(id);
+      plan.push({ kind:"warm", name:x.n, cue:x.c, ms:each, phase:"Warm-up" }); });
+  }
+
+  const live = liveSlots(r);
+  if (r.hold){
+    /* Stretching is held, not intervalled: split the ten minutes across side
+       slots so both sides get equal time. */
+    let slots = 0;
+    live.forEach(id => { slots += (EX[id].sides || 1); });
+    const each = WORK_MS / slots;
+    live.forEach(id => {
+      const x = resolve(id), sides = EX[id].sides || 1;
+      for (let s = 0; s < sides; s++)
+        plan.push({ kind:"work", name:x.n, cue:x.c, ms:each, phase:"Hold",
+                    side: sides === 2 ? (s === 0 ? "Left side" : "Right side") : "" });
+    });
+  } else {
+    /* Twelve slots regardless of how many exercises survived, so fewer
+       exercises means more repeats, never a shorter session. */
+    for (let i = 0; i < WORK_SLOTS; i++){
+      const id = live[i % live.length], x = resolve(id);
+      plan.push({ kind:"work", name:x.n, cue:x.c, ms:WORK_SLOT,
+                  phase:"Round " + (Math.floor(i / live.length) + 1),
+                  perSide: !!EX[id].perSide });
+      const last = i === WORK_SLOTS - 1;
+      const nx = live[(i + 1) % live.length];
+      /* The final rest is kept, not trimmed: it is the ten seconds you spend
+         catching your breath before the summary, and dropping it would make
+         the session 14:50 rather than 15:00. */
+      plan.push({ kind:"rest", name:last ? "Done" : "Rest", cue:"", ms:REST_SLOT,
+                  phase: last ? "Cool down" : "Rest",
+                  next: last ? null : resolve(nx).n, last:last });
+    }
+  }
+  return plan;
+}
+
+/* ---------------- engine ---------------- */
+const S = { plan:[], i:0, start:0, slotStart:0, raf:0, wake:null,
+            paused:false, pausedAt:0, lastTick:-1, sideDone:false, done:[] };
+
+const stage = $("#stage"), drain = $("#drain");
+
+function show(el, on){ el.classList.toggle("on", on); }
+
+async function startSession(){
+  const r = routineById(cfg.routine);
+  if (!r || !available(r) || liveSlots(r).length === 0) return;
+  audio();
+  S.plan = buildPlan(r);
+  S.i = 0; S.paused = false; S.lastTick = -1; S.sideDone = false; S.done = [];
+  S.start = performance.now(); S.slotStart = S.start;
+  $("#routineLabel").textContent = r.name;
+  show($("#summaryView"), false);
+  show($("#session"), true);
+  paintSlot();
+  S.raf = requestAnimationFrame(tick);
+  try { S.wake = await navigator.wakeLock.request("screen"); } catch(e){}
+}
+
+function endSession(showSummary){
+  cancelAnimationFrame(S.raf);
+  if (S.wake){ S.wake.release().catch(()=>{}); S.wake = null; }
+  show($("#session"), false);
+  stage.classList.remove("paused");
+  if (showSummary) renderSummary();
+}
+
+function paintSlot(){
+  const s = S.plan[S.i];
+  stage.classList.toggle("rest", s.kind === "rest");
+  stage.classList.toggle("warm", s.kind === "warm");
+  $("#phaseLabel").textContent = s.phase;
+  $("#exName").textContent = s.kind === "rest" ? (s.next ? "Next: " + s.next : "Done") : s.name;
+  $("#cueText").textContent = s.cue || "";
+  $("#switchCue").textContent = s.side || (s.perSide ? "Left side first" : "");
+  $("#slotCount").textContent = pad2(S.i + 1) + " / " + pad2(S.plan.length);
+  $("#nextUp").textContent = nextLabel();
+  if (s.kind === "work"){ tone.work(); buzz("work"); if (s.name !== "Rest") S.done.push(s.name); }
+  else if (s.kind === "rest"){ tone.rest(); buzz("rest"); }
+  else { tone.rest(); buzz("rest"); }
+  S.sideDone = false;
+  S.lastTick = -1;
+}
+
+function nextLabel(){
+  for (let j = S.i + 1; j < S.plan.length; j++)
+    if (S.plan[j].kind !== "rest") return "Next · " + S.plan[j].name;
+  return "Last one";
+}
+
+function tick(now){
+  if (S.paused) return;
+  const s = S.plan[S.i];
+  const el = now - S.slotStart;
+  const left = s.ms - el;
+  const p = Math.min(1, Math.max(0, el / s.ms));
+
+  drain.style.transform = "scaleX(" + (1 - p).toFixed(4) + ")";
+
+  const secs = Math.max(0, Math.ceil(left / 1000));
+  if (secs !== S.lastTick){
+    S.lastTick = secs;
+    $("#bigNum").textContent = secs;
+    if (secs <= 3 && secs > 0 && s.kind !== "warm") tone.tick();
+  }
+
+  /* halfway through a two-sided interval, tell them to swap */
+  if (s.perSide && !S.sideDone && el >= s.ms / 2){
+    S.sideDone = true;
+    $("#switchCue").textContent = "Switch sides";
+    tone.side(); buzz("side");
+  }
+
+  const total = S.plan.reduce((a,x) => a + x.ms, 0);
+  const doneMs = S.plan.slice(0, S.i).reduce((a,x) => a + x.ms, 0) + el;
+  $("#progress").style.width = (doneMs / total * 100).toFixed(2) + "%";
+  $("#timeLeft").textContent = fmt(total - doneMs) + " left";
+
+  if (left <= 0){
+    S.i++;
+    if (S.i >= S.plan.length){ tone.done(); buzz("done"); return endSession(true); }
+    S.slotStart = now;
+    paintSlot();
+  }
+  S.raf = requestAnimationFrame(tick);
+}
+
+function togglePause(){
+  if (!$("#session").classList.contains("on")) return;
+  S.paused = !S.paused;
+  stage.classList.toggle("paused", S.paused);
+  if (S.paused){ S.pausedAt = performance.now(); cancelAnimationFrame(S.raf); $("#switchCue").textContent = "Paused — tap to resume"; }
+  else { const gap = performance.now() - S.pausedAt; S.slotStart += gap;
+         $("#switchCue").textContent = ""; S.raf = requestAnimationFrame(tick); }
+}
+
+stage.addEventListener("click", togglePause);
+document.addEventListener("keydown", e => {
+  if (e.code === "Space" && $("#session").classList.contains("on")){ e.preventDefault(); togglePause(); }
+  if (e.code === "Escape"){
+    if ($("#exSheet").classList.contains("on")) $("#exSheet").classList.remove("on");
+    else if ($("#session").classList.contains("on")) endSession(S.i > 0);
+  }
+});
+
+/* ---------------- summary ---------------- */
+function renderSummary(){
+  const r = routineById(cfg.routine);
+  const elapsed = performance.now() - S.start;
+  const working = S.plan.slice(0, S.i + 1).filter(x => x.kind === "work").reduce((a,x) => a + x.ms, 0);
+  const intervals = S.plan.slice(0, S.i + 1).filter(x => x.kind === "work").length;
+  $("#sumTitle").textContent = S.i >= S.plan.length - 1 ? "Finished" : "Stopped early";
+  $("#sumLede").textContent = r.name + " · " + (r.hold ? "held" : "intervals");
+  $("#sumTime").textContent  = fmt(elapsed);
+  $("#sumWork").textContent  = fmt(working);
+  $("#sumCount").textContent = intervals;
+
+  /* one row per exercise, with how many times it came round */
+  const counts = [];
+  S.done.forEach(n => { const hit = counts.find(c => c.n === n); if (hit) hit.k++; else counts.push({n, k:1}); });
+  const list = $("#didList"); list.innerHTML = "";
+  counts.forEach((c, i) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="n">${pad2(i + 1)}</span><span class="x">${c.n}</span>` +
+                   `<span class="r">${c.k}&times;</span>`;
+    list.appendChild(li);
+  });
+  show($("#summaryView"), true);
+}
+
+$("#startBtn").onclick = startSession;
+$("#quitBtn").onclick  = () => endSession(S.i > 0);
+$("#againBtn").onclick = () => { show($("#summaryView"), false); startSession(); };
+$("#backBtn").onclick  = () => show($("#summaryView"), false);
+
+})();
+</script>
+</body>
+</html>
