@@ -138,7 +138,13 @@ button.danger:hover{border-color:var(--target);color:var(--target);}
 }
 .seg button + button{border-left:1px solid var(--line);}
 .seg button[aria-pressed="true"]{background:var(--line);color:var(--text);}
-.seg-wrap{display:flex;align-items:center;gap:9px;}
+.seg-toggle{
+  background:none;border:1px solid var(--line);border-radius:var(--r);
+  color:var(--faint);font:inherit;font-size:12px;padding:7px 11px;min-height:34px;
+  cursor:pointer;white-space:nowrap;
+}
+.seg-toggle[aria-pressed="true"]{background:var(--line);color:var(--text);}
+.seg-wrap{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
 .seg-wrap .lab{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600;}
 
 /* ---------- zone 3: three cards, no more ---------- */
@@ -270,6 +276,17 @@ dialog::backdrop{background:rgba(6,8,11,.75);}
     </div>
     <div class="chart-box" id="plot"></div>
     <div class="chart-foot">
+      <div class="seg-wrap">
+        <span class="lab">Zoom</span>
+        <div class="seg" id="seg-zoom" role="group" aria-label="Visible time span">
+          <button data-v="14">2W</button>
+          <button data-v="30">1M</button>
+          <button data-v="90">3M</button>
+          <button data-v="all">All</button>
+        </div>
+        <button class="seg-toggle" id="btn-proj" aria-pressed="true"
+                title="Show or hide the projected curve">Forecast</button>
+      </div>
       <div class="seg-wrap">
         <span class="lab">Show</span>
         <div class="seg" id="seg-range" role="group" aria-label="Projection horizon">
@@ -471,7 +488,7 @@ const DEFAULT_PROFILE = {
 };
 const DEFAULT_SETTINGS = {
   alpha:0.2, projSource:'goal', customIntake:2000,
-  burnMode:'adaptive', tdeeWindow:28, range:'90'
+  burnMode:'adaptive', tdeeWindow:28, range:'90', zoom:'all', showProj:true
 };
 
 /* Demo series, 15 days anchored to today: day −14 = 80.0 kg, day 0 = 79.0 kg,
@@ -688,6 +705,14 @@ const Model = {
 let state = { profile:{...DEFAULT_PROFILE}, settings:{...DEFAULT_SETTINGS}, entries:[] };
 let editingDate = null;
 let scrubIndex  = null;   // scrub position on the plot, drives the readout above it
+
+/* Visible x-window, in days. viewDays null means fit everything. On a phone the
+   full span is about 2.7 px per day, so a fingertip covers a fortnight and no
+   single day can be picked; narrowing the window is what makes the scrub usable.
+   viewEnd is the rightmost visible day index, so panning moves the window
+   without changing its width. */
+let viewDays = null;
+let viewEnd  = null;
 let view  = null;         // last computed view model, shared with the plot renderer
 
 const persist = () => Store.save(state);
@@ -712,7 +737,9 @@ const SETTINGS_SPEC = {
   customIntake:   {min:800, max:6000},
   burnMode:       {enum:['adaptive','formula']},
   tdeeWindow:     {min:21,  max:120},
-  range:          {enum:['90','180','auto']}
+  range:          {enum:['90','180','auto']},
+  zoom:           {enum:['14','30','90','all']},
+  showProj:       {bool:true}
 };
 
 /* Returns defaults with only the values that pass their rule copied over.
@@ -724,6 +751,7 @@ function coerce(obj, spec, defaults){
   for(const key of Object.keys(spec)){
     const rule=spec[key], raw=obj[key];
     if(raw===undefined || raw===null) continue;
+    if(rule.bool){ out[key]=raw===true||raw==='true'; continue; }
     if(rule.enum){
       const cand = rule.num ? Number(raw) : raw;
       if(rule.enum.includes(cand)) out[key]=cand;
@@ -994,9 +1022,10 @@ const Plot = {
     }
 
     /* ---- daily label axis: up to 180 days of history, then the horizon ---- */
+    const showProj = state.settings.showProj !== false;
     const first=state.entries.length?state.entries[0].date:todayStr();
     const histStart=diffDays(first,v.lastDate)>180?addDays(v.lastDate,-180):first;
-    const total=Math.max(1,diffDays(histStart,v.lastDate)+v.horizon);
+    const total=Math.max(1,diffDays(histStart,v.lastDate)+(showProj?v.horizon:0));
     const labels=[]; for(let i=0;i<=total;i++) labels.push(addDays(histStart,i));
     const idx=Object.fromEntries(labels.map((d,i)=>[d,i]));
     const blank=()=>new Array(labels.length).fill(null);
@@ -1008,22 +1037,45 @@ const Plot = {
       if(r.ewma!=null)    trend[i]=r.ewma;
       if(r.ewmaSE!=null)  band[i]=r.ewmaSE;
     }
-    proj[idx[v.lastDate]]=v.trendNow;                       // join dashed to solid
-    for(const pt of v.projection){ const i=idx[addDays(v.lastDate,pt.day)]; if(i!==undefined) proj[i]=pt.weight; }
+    if(showProj){
+      proj[idx[v.lastDate]]=v.trendNow;                     // join dashed to solid
+      for(const pt of v.projection){ const i=idx[addDays(v.lastDate,pt.day)]; if(i!==undefined) proj[i]=pt.weight; }
+    }
+
+    /* Visible window. A preset anchors on today rather than on the far right of
+       the forecast: zooming to a fortnight should show the last fortnight of
+       real data, not a fortnight of simulation. */
+    const lastIdx = idx[v.lastDate];
+    const span = viewDays==null ? total : clamp(Math.round(viewDays), 6, total);
+    if(viewEnd==null)
+      viewEnd = (viewDays==null) ? total
+              : Math.min(total, lastIdx + (showProj ? Math.round(span*0.3) : 0));
+    const i1 = clamp(viewEnd, span, total);
+    const i0 = i1 - span;
+    this.win = {i0, i1, total, span};
 
     /* ---- scales ---- */
+    const inWin=(i)=> i>=i0 && i<=i1;
     const bandHi=[], bandLo=[];
-    band.forEach((se,i)=>{ if(se!=null && trend[i]!=null){
+    band.forEach((se,i)=>{ if(se!=null && trend[i]!=null && inWin(i)){
       bandHi.push(trend[i]+1.96*se); bandLo.push(trend[i]-1.96*se); } });
-    const vals=[...raw,...trend,...proj,...bandHi,...bandLo].filter(n=>n!=null);
-    const lo=Math.min(...vals,p.target1,p.target2)-0.7;
-    const hi=Math.max(...vals,p.target1,p.target2)+0.7;
+    /* y follows the window too, so a zoomed view fills the panel instead of
+       staying flattened against the full-range extremes. */
+    const visible=(arr)=>arr.filter((n,i)=>n!=null&&inWin(i));
+    const vals=[...visible(raw),...visible(trend),...visible(proj),...bandHi,...bandLo];
+    const tgts=[p.target1,p.target2].filter(t=>{
+      const c=vals.length?[Math.min(...vals),Math.max(...vals)]:null;
+      return !c || (t>=c[0]-6 && t<=c[1]+6);      // keep a target only if it is near the view
+    });
+    const pool = vals.length?vals:[v.trendNow];
+    const lo=Math.min(...pool,...tgts)-0.7;
+    const hi=Math.max(...pool,...tgts)+0.7;
     const L=this.padL, R=w-this.padR, T=this.padT, B=h-this.padB;
     const N=labels.length;
-    const X=(i)=> L + (N<2?0:(i/(N-1))*(R-L));
+    const X=(i)=> L + (span<1?0:((i-i0)/span)*(R-L));
     const Y=(val)=> B - ((val-lo)/(hi-lo))*(B-T);
 
-    this.geom={labels,raw,trend,proj,X,Y,L,R,T,B,N,lastIdx:idx[v.lastDate]};
+    this.geom={labels,raw,trend,proj,X,Y,L,R,T,B,N,i0,i1,span,total,lastIdx};
 
     /* ---- layers ---- */
     let s='';
@@ -1036,9 +1088,9 @@ const Plot = {
     }
 
     // x labels: 4 evenly spaced dates, first left-aligned, last right-aligned
-    const stepX=Math.max(1,Math.floor((N-1)/3));
-    for(let i=0;i<N;i+=stepX){
-      const anchor = i===0 ? 'start' : (i+stepX>=N ? 'end' : 'middle');
+    const stepX=Math.max(1,Math.floor(span/3));
+    for(let i=i0;i<=i1;i+=stepX){
+      const anchor = i===i0 ? 'start' : (i+stepX>i1 ? 'end' : 'middle');
       s+=`<text x="${X(i).toFixed(1)}" y="${h-6}" fill="#5C6878" font-size="10" text-anchor="${anchor}">${shortDate(labels[i])}</text>`;
     }
 
@@ -1056,6 +1108,11 @@ const Plot = {
      + `<text x="${(tx+4).toFixed(1)}" y="${T+8}" fill="#8A97A8" font-size="9" font-weight="600" letter-spacing="1">PROJECTED</text>`;
 
     // series
+    /* Everything from here is inside the plot rect: when the window is narrower
+       than the data, series would otherwise paint across the labels. */
+    s+=`<defs><clipPath id="plotclip"><rect x="${L}" y="${T}" width="${(R-L).toFixed(1)}" height="${(B-T).toFixed(1)}"/></clipPath></defs>`
+     + `<g clip-path="url(#plotclip)">`;
+
     const projPts=this.paths(proj,X,Y);
     if(projPts.length>1)
       s+=`<polyline points="${projPts.join(' ')}" fill="none" stroke="#4FD1C5" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
@@ -1078,6 +1135,8 @@ const Plot = {
 
     raw.forEach((val,i)=>{ if(val!=null)
       s+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(val).toFixed(1)}" r="2.4" fill="#6E829B"/>`; });
+
+    s+=`</g>`;
 
     // crossing markers, with the date placed inside the plot
     for(const [kg,col,res] of targets){
@@ -1105,7 +1164,18 @@ const Plot = {
     const g=this.geom;
     const x=clientX-$('plot').getBoundingClientRect().left;
     if(x<g.L-8||x>g.R+8) return null;
-    return clamp(Math.round(((x-g.L)/(g.R-g.L))*(g.N-1)),0,g.N-1);
+    const i = g.i0 + Math.round(((x-g.L)/(g.R-g.L))*g.span);
+    const near = clamp(i, g.i0, g.i1);
+    /* Snap to a real weigh-in when one is close, so a fingertip lands on data
+       rather than on an empty day between readings. The tolerance scales with
+       the zoom: about six pixels' worth of days, at least one. */
+    const tol = Math.max(1, Math.round(g.span/((g.R-g.L)/6)));
+    let best=null, bestD=Infinity;
+    for(let k=Math.max(g.i0,near-tol); k<=Math.min(g.i1,near+tol); k++){
+      if(g.raw[k]==null) continue;
+      const d=Math.abs(k-near); if(d<bestD){ bestD=d; best=k; }
+    }
+    return best!=null ? best : near;
   },
 
   /* Only the crosshair moves on scrub; the rest of the SVG is untouched. */
@@ -1124,6 +1194,17 @@ const Plot = {
 };
 
 function renderChart(v){ Plot.render(v); renderScrub(); }
+
+/* A pinch lands between the presets, so the buttons show a match only when the
+   span really is that preset. */
+function syncZoomButtons(span, total){
+  for(const b of $('seg-zoom').children){
+    const on = b.dataset.v==='all'
+      ? (span==null || (total!=null && span>=total))
+      : (span!=null && Math.abs(span-Number(b.dataset.v))<=1);
+    b.setAttribute('aria-pressed', String(on));
+  }
+}
 
 /* Continuous scrub readout — replaces +30/+60/+90 cards with every single day. */
 function renderScrub(){
@@ -1149,9 +1230,43 @@ function renderScrub(){
   const set=(i)=>{ if(i!==scrubIndex){ scrubIndex=i; Plot.moveCross(i); renderScrub(); } };
   host.addEventListener('mousemove', e=>set(Plot.indexAt(e.clientX)));
   host.addEventListener('mouseleave',()=>set(null));
-  host.addEventListener('touchstart',e=>set(Plot.indexAt(e.touches[0].clientX)),{passive:true});
-  host.addEventListener('touchmove', e=>set(Plot.indexAt(e.touches[0].clientX)),{passive:true});
-  host.addEventListener('touchend',  ()=>set(null));
+  host.addEventListener('touchstart',e=>{
+    if(e.touches.length>1){ set(null); beginPinch(e); return; }
+    set(Plot.indexAt(e.touches[0].clientX));
+  },{passive:true});
+
+  host.addEventListener('touchmove', e=>{
+    if(e.touches.length>1){ movePinch(e); return; }
+    if(pinch) return;                    // ignore the stray finger left after a pinch
+    set(Plot.indexAt(e.touches[0].clientX));
+  },{passive:false});
+
+  host.addEventListener('touchend', e=>{
+    if(e.touches.length===0){ pinch=null; set(null); }
+  });
+
+  /* Two fingers: the distance between them sets the span, their midpoint pans.
+     One finger is left alone because it is already the scrub, which is the
+     primary reading gesture and should not be overloaded. */
+  let pinch=null;
+  const dist=t=>Math.abs(t[0].clientX-t[1].clientX);
+  const mid =t=>(t[0].clientX+t[1].clientX)/2;
+
+  function beginPinch(e){
+    const g=Plot.geom; if(!g) return;
+    pinch={d:Math.max(20,dist(e.touches)), m:mid(e.touches), span:g.span, end:g.i1};
+  }
+  function movePinch(e){
+    const g=Plot.geom; if(!g||!pinch) return;
+    if(e.cancelable) e.preventDefault();          // stop the page scrolling under the gesture
+    const scale=Math.max(20,dist(e.touches))/pinch.d;
+    const span =clamp(Math.round(pinch.span/scale), 6, g.total);
+    const dxDays=((mid(e.touches)-pinch.m)/(g.R-g.L))*span;
+    viewDays=span===g.total?null:span;
+    viewEnd =clamp(Math.round(pinch.end-dxDays), span, g.total);
+    syncZoomButtons(span, g.total);
+    renderChart(view);
+  }
 })();
 
 /* Redraw on rotate or resize; SVG geometry is pixel-based, not viewBox-scaled. */
@@ -1217,6 +1332,8 @@ function renderModel(v){
 /* ---------- segmented controls reflect state ---------- */
 function syncSegs(){
   for(const b of $('seg-range').children) b.setAttribute('aria-pressed', String(b.dataset.v===state.settings.range));
+  $('btn-proj').setAttribute('aria-pressed', String(state.settings.showProj!==false));
+  syncZoomButtons(viewDays, Plot.win?Plot.win.total:null);
   const a=state.settings.alpha;
   for(const b of $('seg-alpha').children) b.setAttribute('aria-pressed', String(Math.abs(Number(b.dataset.v)-a)<0.005));
 }
@@ -1296,6 +1413,20 @@ $('tbody').addEventListener('click',ev=>{
 });
 
 /* segmented controls */
+$('seg-zoom').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  state.settings.zoom=b.dataset.v;
+  viewDays = b.dataset.v==='all' ? null : Number(b.dataset.v);
+  viewEnd  = null;                       // re-anchor on today
+  persist(); render();
+});
+
+$('btn-proj').addEventListener('click',()=>{
+  state.settings.showProj = state.settings.showProj===false;
+  viewEnd = null;
+  persist(); render();
+});
+
 $('seg-range').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
   state.settings.range=b.dataset.v; persist(); render();
@@ -1418,6 +1549,9 @@ $('btn-clear').addEventListener('click',()=>{
 function boot(){
   if(!Store.available()) $('storage-warning').hidden=false;
   loadState();
+  // the saved zoom preset drives the window; a pinch is deliberately not persisted
+  viewDays = state.settings.zoom && state.settings.zoom!=='all'
+    ? Number(state.settings.zoom) : null;
   $('in-date').value=todayStr();
   const today=state.entries.find(e=>e.date===todayStr());
   $('in-weight').value = today && today.weight!=null ? today.weight : '';

@@ -125,6 +125,22 @@ Day-by-day simulation over the chosen horizon. BMR is recomputed from the simula
 weight every day, so resting burn falls about 10 kcal per kilogram lost and the curve
 flattens rather than running in a straight line to zero.
 
+## Reading the chart
+
+On a phone the full view is about 2.7 pixels per day, so a fingertip covers a
+fortnight and no single day can be picked. Two controls fix that:
+
+- **Zoom** — `2W` / `1M` / `3M` / `All` set how much time is visible. At `2W` a day is
+  about 17 pixels wide, roughly seven times easier to hit. Pinch to zoom and drag with
+  two fingers to pan; one finger stays the scrub, since reading a value is the primary
+  gesture and should not be overloaded.
+- **Forecast** — hides the projected curve. With a short history the forecast occupies
+  most of the width, so turning it off is often a bigger gain than zooming.
+
+Zooming rescales the y-axis to what is visible, so a narrow window fills the panel
+instead of staying flattened against the full range. The scrub snaps to a real weigh-in
+when one is within a few pixels, so you land on data rather than an empty day.
+
 ## Known limitations
 
 - **Garbage in, garbage out.** The fit cannot distinguish under-reported food from a
