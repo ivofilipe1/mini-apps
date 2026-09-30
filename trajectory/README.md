@@ -130,12 +130,18 @@ flattens rather than running in a straight line to zero.
 On a phone the full view is about 2.7 pixels per day, so a fingertip covers a
 fortnight and no single day can be picked. Two controls fix that:
 
-- **Zoom** — `2W` / `1M` / `3M` / `All` set how much time is visible. At `2W` a day is
-  about 17 pixels wide, roughly seven times easier to hit. Pinch to zoom and drag with
-  two fingers to pan; one finger stays the scrub, since reading a value is the primary
-  gesture and should not be overloaded.
+- **Show** — `2W` / `1M` / `3M` / `To target` set how much time is visible. At `2W` a
+  day is about 17 pixels wide, roughly seven times easier to hit. Pinch to zoom and drag
+  with two fingers to pan; one finger stays the scrub, since reading a value is the
+  primary gesture and should not be overloaded.
 - **Forecast** — hides the projected curve. With a short history the forecast occupies
   most of the width, so turning it off is often a bigger gain than zooming.
+
+How far the projection is simulated follows from the window rather than being set
+separately: a fixed span runs the forecast far enough to fill the space to the right of
+today, and `To target` runs it until the second target is crossed. The two were never
+independent in any visible way — simulating six months while zoomed to a fortnight draws
+curve beyond the edge of the plot.
 
 Zooming rescales the y-axis to what is visible, so a narrow window fills the panel
 instead of staying flattened against the full range. The scrub snaps to a real weigh-in

@@ -145,6 +145,15 @@ button.danger:hover{border-color:var(--target);color:var(--target);}
 }
 .seg-toggle[aria-pressed="true"]{background:var(--line);color:var(--text);}
 .seg-wrap{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+/* One row of controls has to hold four spans plus the forecast toggle; on a
+   narrow phone that wraps the toggle onto a line of its own and wastes a band
+   of vertical space above the fold. Tighten the hit padding instead, staying
+   above the 32px minimum for a touch target. */
+@media (max-width:440px){
+  .chart-foot .seg button{padding:8px 9px;}
+  .chart-foot .seg-toggle{padding:8px 9px;}
+  .seg-wrap{gap:7px;}
+}
 .seg-wrap .lab{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600;}
 
 /* ---------- zone 3: three cards, no more ---------- */
@@ -277,23 +286,15 @@ dialog::backdrop{background:rgba(6,8,11,.75);}
     <div class="chart-box" id="plot"></div>
     <div class="chart-foot">
       <div class="seg-wrap">
-        <span class="lab">Zoom</span>
+        <span class="lab">Show</span>
         <div class="seg" id="seg-zoom" role="group" aria-label="Visible time span">
           <button data-v="14">2W</button>
           <button data-v="30">1M</button>
           <button data-v="90">3M</button>
-          <button data-v="all">All</button>
+          <button data-v="all">To target</button>
         </div>
         <button class="seg-toggle" id="btn-proj" aria-pressed="true"
                 title="Show or hide the projected curve">Forecast</button>
-      </div>
-      <div class="seg-wrap">
-        <span class="lab">Show</span>
-        <div class="seg" id="seg-range" role="group" aria-label="Projection horizon">
-          <button data-v="90">90 days</button>
-          <button data-v="180">6 months</button>
-          <button data-v="auto">To target</button>
-        </div>
       </div>
       <div class="seg-wrap">
         <span class="lab">Smoothing</span>
@@ -488,7 +489,7 @@ const DEFAULT_PROFILE = {
 };
 const DEFAULT_SETTINGS = {
   alpha:0.2, projSource:'goal', customIntake:2000,
-  burnMode:'adaptive', tdeeWindow:28, range:'90', zoom:'all', showProj:true
+  burnMode:'adaptive', tdeeWindow:28, zoom:'all', showProj:true
 };
 
 /* Demo series, 15 days anchored to today: day −14 = 80.0 kg, day 0 = 79.0 kg,
@@ -737,7 +738,6 @@ const SETTINGS_SPEC = {
   customIntake:   {min:800, max:6000},
   burnMode:       {enum:['adaptive','formula']},
   tdeeWindow:     {min:21,  max:120},
-  range:          {enum:['90','180','auto']},
   zoom:           {enum:['14','30','90','all']},
   showProj:       {bool:true}
 };
@@ -845,11 +845,19 @@ function compute(){
     Model.dateForTarget({startWeight:trendNow, profile:p, intake, calibration, target:t, fromDate:lastDate});
   const t1=targetOf(p.target1), t2=targetOf(p.target2);
 
-  // Horizon: 'auto' extends far enough to show target 2 being crossed.
-  let horizon = Number(s.range);
-  if (s.range==='auto'){
+  /* Horizon is derived from the visible window rather than set on its own.
+     The two were never independent in any way a reader could see: simulating
+     six months while zoomed to a fortnight draws pixels beyond the edge of the
+     plot. A fixed span shows enough forecast to fill the space to the right of
+     today; 'To target' runs far enough to show target 2 being crossed. */
+  let horizon;
+  if (s.showProj === false){
+    horizon = 0;
+  } else if (viewDays == null){
     const cands=[t1,t2].filter(x=>x && x.day).map(x=>x.day);
     horizon = cands.length ? clamp(Math.max(...cands)+20, 90, SEARCH_DAYS) : 180;
+  } else {
+    horizon = Math.max(7, Math.ceil(viewDays*0.45));
   }
 
   const projection = trendNow!=null
@@ -1331,7 +1339,6 @@ function renderModel(v){
 
 /* ---------- segmented controls reflect state ---------- */
 function syncSegs(){
-  for(const b of $('seg-range').children) b.setAttribute('aria-pressed', String(b.dataset.v===state.settings.range));
   $('btn-proj').setAttribute('aria-pressed', String(state.settings.showProj!==false));
   syncZoomButtons(viewDays, Plot.win?Plot.win.total:null);
   const a=state.settings.alpha;
@@ -1427,10 +1434,7 @@ $('btn-proj').addEventListener('click',()=>{
   persist(); render();
 });
 
-$('seg-range').addEventListener('click',e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  state.settings.range=b.dataset.v; persist(); render();
-});
+
 $('seg-alpha').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
   state.settings.alpha=Number(b.dataset.v); persist(); render();
