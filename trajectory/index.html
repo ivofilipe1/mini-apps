@@ -78,6 +78,12 @@ body{
 }
 .answer .rate.up{color:var(--target);}
 .answer .rate.flat{color:var(--muted);}
+.readout{margin:10px 0 0;font-size:13px;color:var(--muted);max-width:60ch;
+  padding-left:11px;border-left:2px solid var(--line);}
+.readout b{font-weight:600;}
+.readout.clear{border-left-color:var(--trend);}
+.readout.clear b{color:var(--trend);}
+.readout.noisy b{color:var(--muted);}
 .sentence{margin:14px 0 0;font-size:14.5px;color:var(--muted);max-width:60ch;}
 .sentence b{color:var(--text);font-weight:600;}
 .sentence .date{color:var(--proj);font-weight:600;font-family:var(--mono);}
@@ -234,6 +240,7 @@ dialog::backdrop{background:rgba(6,8,11,.75);}
       <span class="rate" id="a-rate"></span>
     </div>
     <p class="sentence" id="a-sentence">Log a weigh-in to start the trend.</p>
+    <p class="readout" id="a-readout" hidden></p>
 
     <div class="logrow">
       <div class="field">
@@ -495,15 +502,69 @@ const Model = {
      exactly to EWMA_t = α·W_t + (1−α)·EWMA_(t−1). */
   withEwma(entries, alpha){
     const lambda = 1 - alpha;          // fraction of yesterday's trend retained
-    let num=0, den=0, prevDate=null;
-    return entries.map(e => {
-      if (e.weight==null) return {...e, ewma:null};
+    let num=0, den=0, den2=0, prevDate=null;
+    const out = entries.map(e => {
+      if (e.weight==null) return {...e, ewma:null, k:null};
       const decay = prevDate ? Math.pow(lambda, Math.max(1, diffDays(prevDate, e.date))) : 0;
-      num = num*decay + e.weight;
-      den = den*decay + 1;
+      num  = num*decay + e.weight;
+      den  = den*decay + 1;
+      den2 = den2*decay*decay + 1;     // sum of squared weights, for the variance
       prevDate = e.date;
-      return {...e, ewma: num/den};
+      /* Var(trend) = sigma^2 * sum(w^2)/sum(w)^2, so k is the factor that turns
+         the scale's noise into the trend's own standard error. At alpha 0.2 and
+         daily logging it settles near 0.33: the trend is about a third as noisy
+         as the scale. */
+      return {...e, ewma: num/den, k: Math.sqrt(den2)/den};
     });
+
+    /* sigma, the scale's day-to-day noise, read off the scatter of raw readings
+       about the trend. A reading sits inside its own trend, which shrinks that
+       residual by a factor fixed by alpha, so divide it back out. */
+    const seen = out.filter(r => r.ewma!=null);
+    let sigma = null;
+    if(seen.length >= 5){
+      const res = seen.map(r => r.weight - r.ewma);
+      const m   = res.reduce((a,b)=>a+b,0)/res.length;
+      const sd  = Math.sqrt(res.reduce((a,b)=>a+(b-m)*(b-m),0)/(res.length-1));
+      const shrink = Math.sqrt(Math.pow(1-alpha,2) + (1/(1-lambda*lambda) - 1)*alpha*alpha);
+      sigma = sd/shrink;
+    }
+    return out.map(r => {
+      const {k, ...rest} = r;
+      return {...rest, ewmaSE: (r.ewma==null || sigma==null) ? null : sigma*k};
+    });
+  },
+
+  /* Change in the trend over a window, with the uncertainty of that change.
+     A single day's trend move is mostly water: at alpha 0.2 the trend's own
+     day-to-day wobble is roughly twice the real daily change at half a kilo a
+     week. Over 14 days the real change pulls clear. This reports which case
+     the user is actually in rather than leaving them to guess from the line. */
+  trendDelta(rows, days){
+    const w = rows.filter(r => r.ewma!=null);
+    if(w.length < 2) return null;
+    const last   = w[w.length-1];
+    const cutoff = addDays(last.date, -days);
+    let prev = null;
+    for(const r of w){ if(r.date <= cutoff) prev = r; }
+    if(!prev) prev = w[0];
+    const span = diffDays(prev.date, last.date);
+    if(span < 1) return null;
+    /* Treats the two endpoints as independent, which they are not - they share
+       readings - so this errs wide. Overstating the uncertainty is the safe
+       direction for a claim about whether a change is real. */
+    const se = (last.ewmaSE!=null && prev.ewmaSE!=null)
+      ? Math.sqrt(last.ewmaSE*last.ewmaSE + prev.ewmaSE*prev.ewmaSE) : null;
+    const delta = last.ewma - prev.ewma;
+    /* Ratio against the 2-sigma band rather than a hard pass/fail at exactly
+       2 sigma: a cutoff that sharp implies a precision this does not have, and
+       at the boundary the two figures round to the same number, which reads as
+       a contradiction ("down 0.7 kg, clear of 0.7 kg"). */
+    const ratio = se!=null && se>0 ? Math.abs(delta)/(2*se) : null;
+    return { delta, se, days:span, ratio,
+             verdict: ratio==null ? 'unknown'
+                    : ratio >= 1.15 ? 'clear'
+                    : ratio >= 0.85 ? 'borderline' : 'noise' };
   },
 
   /* Adaptive burn estimate by weighted least squares on the energy-balance
@@ -766,7 +827,9 @@ function compute(){
   const projection = trendNow!=null
     ? Model.project({startWeight:trendNow, profile:p, intake, calibration, days:horizon}) : [];
 
-  return { rows, weighed, lastRow, lastDate, trendNow, rawNow:lastRow?lastRow.weight:null,
+  const delta14 = Model.trendDelta(rows, 14);
+
+  return { rows, weighed, lastRow, lastDate, trendNow, delta14, rawNow:lastRow?lastRow.weight:null,
            rate7, tdee, formulaTDEE, burnNow, calibration, burnBasis, intake, avg7,
            measured, confidence, clamped,
            projection, horizon, t1, t2,
@@ -779,6 +842,36 @@ function compute(){
 function renderAnswer(v){
   const p = state.profile;
   $('a-trend').textContent = f1(v.trendNow);
+
+  /* How to read the trend line, in words. Without this the 1px line invites
+     day-to-day reading, which is the one thing it cannot support. */
+  const ro = $('a-readout'), d = v.delta14;
+  if(!d){
+    ro.hidden = true;
+  } else {
+    ro.hidden = false;
+    const dir = d.delta < 0 ? 'Down' : 'Up';
+    const mag = `${Math.abs(d.delta).toFixed(1)} kg`;
+    const noiseBand = `&plusmn;${(2*d.se).toFixed(1)} kg`;
+    if(d.verdict === 'unknown'){
+      ro.className = 'readout';
+      ro.innerHTML = `<b>${dir} ${mag}</b> over ${d.days} days. Needs five weigh-ins `
+                   + `before the daily scatter can be separated from a real change.`;
+    } else if(d.verdict === 'clear'){
+      ro.className = 'readout clear';
+      ro.innerHTML = `<b>${dir} ${mag}</b> over ${d.days} days. Comfortably larger than `
+                   + `the ${noiseBand} this scale wanders on its own, so it is a real change.`;
+    } else if(d.verdict === 'borderline'){
+      ro.className = 'readout noisy';
+      ro.innerHTML = `<b>${dir} ${mag}</b> over ${d.days} days — about the same size as `
+                   + `the ${noiseBand} of normal fluctuation. Suggestive, not settled. `
+                   + `Another week decides it.`;
+    } else {
+      ro.className = 'readout noisy';
+      ro.innerHTML = `<b>${dir} ${mag}</b> over ${d.days} days, well inside the ${noiseBand} `
+                   + `this scale wanders on its own. Not yet distinguishable from noise.`;
+    }
+  }
 
   const rateEl = $('a-rate');
   if (v.rate7==null){ rateEl.textContent=''; }
@@ -908,17 +1001,21 @@ const Plot = {
     const idx=Object.fromEntries(labels.map((d,i)=>[d,i]));
     const blank=()=>new Array(labels.length).fill(null);
 
-    const raw=blank(), trend=blank(), proj=blank();
+    const raw=blank(), trend=blank(), proj=blank(), band=blank();
     for(const r of v.rows){
       const i=idx[r.date]; if(i===undefined) continue;
-      if(r.weight!=null) raw[i]=r.weight;
-      if(r.ewma!=null)   trend[i]=r.ewma;
+      if(r.weight!=null)  raw[i]=r.weight;
+      if(r.ewma!=null)    trend[i]=r.ewma;
+      if(r.ewmaSE!=null)  band[i]=r.ewmaSE;
     }
     proj[idx[v.lastDate]]=v.trendNow;                       // join dashed to solid
     for(const pt of v.projection){ const i=idx[addDays(v.lastDate,pt.day)]; if(i!==undefined) proj[i]=pt.weight; }
 
     /* ---- scales ---- */
-    const vals=[...raw,...trend,...proj].filter(n=>n!=null);
+    const bandHi=[], bandLo=[];
+    band.forEach((se,i)=>{ if(se!=null && trend[i]!=null){
+      bandHi.push(trend[i]+1.96*se); bandLo.push(trend[i]-1.96*se); } });
+    const vals=[...raw,...trend,...proj,...bandHi,...bandLo].filter(n=>n!=null);
     const lo=Math.min(...vals,p.target1,p.target2)-0.7;
     const hi=Math.max(...vals,p.target1,p.target2)+0.7;
     const L=this.padL, R=w-this.padR, T=this.padT, B=h-this.padB;
@@ -962,6 +1059,15 @@ const Plot = {
     const projPts=this.paths(proj,X,Y);
     if(projPts.length>1)
       s+=`<polyline points="${projPts.join(' ')}" fill="none" stroke="#4FD1C5" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
+
+    /* 95% band on the trend. The line is an estimate from noisy readings, not
+       a measurement; drawn bare it reads as precise to the millimetre. */
+    const up=[], dn=[];
+    band.forEach((se,i)=>{ if(se!=null && trend[i]!=null){
+      up.push(`${X(i).toFixed(1)},${Y(trend[i]+1.96*se).toFixed(1)}`);
+      dn.push(`${X(i).toFixed(1)},${Y(trend[i]-1.96*se).toFixed(1)}`); } });
+    if(up.length>1)
+      s+=`<polygon points="${up.concat(dn.reverse()).join(' ')}" fill="#E8B14A" opacity=".14"/>`;
 
     const trendPts=this.paths(trend,X,Y);
     if(trendPts.length>1)

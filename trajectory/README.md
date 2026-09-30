@@ -86,6 +86,39 @@ TDEE = BMR × activity factor
 Used alone until there is enough data to fit, and as the anchor the fitted value is
 blended against.
 
+### How certain is the trend?
+
+The trend is an estimate from noisy readings, not a measurement, so the chart draws a
+95% band around it and the headline says in words what the last 14 days mean.
+
+The trend's own standard error follows from the same weights that produce it:
+
+```
+Var(trend) = sigma^2 * sum(w^2) / sum(w)^2
+```
+
+`sigma` is the scale's day-to-day noise, read off the scatter of raw readings about the
+trend and corrected for the fact that each reading sits inside its own trend, which
+shrinks that residual by a factor fixed by alpha. At alpha 0.2 with daily logging the
+band settles near 0.33 sigma: **the trend is about a third as noisy as the scale.**
+
+That matters because at half a kilo per week the real change is 71 g/day while the
+trend's own day-to-day wobble is about 134 g. A single day's movement is roughly twice
+as much noise as signal. Simulation against a known trend gives the crossover:
+
+| Look back | Real change | Trend noise | Signal/noise |
+|---|---|---|---|
+| 1 day | 71 g | 134 g | 0.53x |
+| 7 days | 500 g | 420 g | 1.19x |
+| 14 days | 1,000 g | 490 g | 2.04x |
+| 28 days | 2,000 g | 509 g | 3.93x |
+
+So the readout uses a 14-day window and reports one of three verdicts by comparing the
+change against twice its standard error: clear (ratio >= 1.15), borderline (>= 0.85), or
+not distinguishable from fluctuation. The bands overlap deliberately — a hard pass/fail
+at exactly 2 sigma implies a precision this does not have, and at the boundary both
+figures round to the same number, which reads as a contradiction.
+
 ### Projection
 
 Day-by-day simulation over the chosen horizon. BMR is recomputed from the simulated
@@ -99,6 +132,12 @@ flattens rather than running in a straight line to zero.
   inflates the burn estimate proportionally.
 - **7,700 kcal/kg assumes fat.** Early loss is largely glycogen and water, so the
   fitted burn reads high in the first weeks and settles as data accumulates.
+- **The band assumes independent daily noise.** Water weight persists across days, so
+  real readings are correlated and the band is somewhat optimistic — treat it as a floor
+  on the uncertainty, not a ceiling.
+- **The 14-day change treats its two endpoints as independent.** They share readings, so
+  its error bar errs wide. Overstating uncertainty is the safe direction for a claim
+  about whether a change is real.
 - **The standard error is internal precision, not accuracy.** It describes how well
   the line fits your points, not how close the answer is to your true expenditure.
 - **Not the full dynamic model.** Burn falling with mass is modelled; fat/lean
