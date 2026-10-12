@@ -83,11 +83,11 @@ With the features off, the app makes no network requests.
 
 This is a **generated file**, not hand-written source, so unlike the other apps it
 has a build step, just not in this repo. The source lives in a separate repository
-([ivofilipe1/Wandeling-app](https://github.com/ivofilipe1/Wandeling-app), which is
-not necessarily public). Its build script splices the scenes, the sentence data and
-the font into one HTML file.
+that is not public. Its build script splices the scenes, the sentence data and the
+font into one HTML file.
 
-The copy committed here was built from commit `d799e09` on 2026-10-12. Settings →
+The commit hash below refers to that repository, so it cannot be looked up from
+here. The copy committed here was built from commit `d799e09` on 2026-10-12. Settings →
 diagnostics in the app shows the same stamp (`d799e09, 2026-10-12`). The stamp never
 ends in `+edits`: that suffix means the build came from a tree with uncommitted
 changes, and such a build is not published here.
