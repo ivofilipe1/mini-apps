@@ -9,18 +9,15 @@
 <meta name="description" content="Small, practical tools for wellbeing, health, and everyday life. No accounts, no subscriptions, and no data leaving your device.">
 <style>
 :root{
-  /* Surfaces step by roughly 5 points of perceptual lightness (CIE L*), so
-     page / card / hover read as distinct layers. Contrast ratio is a poor
-     guide between dark surfaces; L* is what the eye actually resolves. */
+  /* Page and panel step by about 5 points of perceptual lightness (CIE L*).
+     Contrast ratio is a poor guide between dark surfaces; L* is what the eye
+     actually resolves. Card colours are per app, further down. */
   --page:#17141d;     /* L* 7  */
   --panel:#221d2a;    /* L* 12 */
-  --card:#2e2739;     /* L* 17 */
-  --card-hi:#3a3247;  /* L* 22 */
   --line:#443c52;
-  --line-hi:#6d6180;
-  --bone:#efeae1;     /* 12.8:1 on card */
-  --dim:#b3aaa2;      /*  6.7:1 on card */
-  --faint:#9b9289;    /*  5.0:1 on card — the old value failed AA at 3.1:1 */
+  --bone:#efeae1;     /* 13.7:1 on panel */
+  --dim:#b3aaa2;      /*  7.2:1 on panel */
+  --faint:#9b9289;    /*  5.4:1 on panel */
   --accent:#9cc095;
   --sans:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
   --serif:Georgia,'Iowan Old Style','Palatino Linotype','Noto Serif',serif;
@@ -47,27 +44,41 @@ h1{font-family:var(--serif);font-style:italic;font-weight:400;
 .list{list-style:none;padding:0;margin:0}
 .card{
   display:block;text-decoration:none;color:inherit;cursor:pointer;
-  background:var(--card);border:1px solid var(--line);border-radius:5px;
-  padding:20px 22px 18px;margin-bottom:14px;
+  background:var(--c-bg);border:1px solid var(--c-line);border-left:4px solid var(--c-edge);
+  border-radius:5px;
+  padding:20px 22px 18px 20px;margin-bottom:14px;
   transition:background .16s ease,border-color .16s ease,transform .16s ease;
 }
-.card:hover{background:var(--card-hi);border-color:var(--line-hi);transform:translateY(-2px)}
+.card:hover{background:var(--c-hi);transform:translateY(-2px)}
 .card:active{transform:translateY(0)}
 .card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 
+/* One palette per app, taken from the app itself. Dark cards sit at L* 22-23
+   against the L* 12 panel; Wandeling is cream because its own page is. Accent
+   text is 5.6-7.1:1 on the card and 4.9-5.8:1 on hover, so the small "Open"
+   label passes AA in both states. */
+.c-tide{--c-bg:#1f3d2f;--c-hi:#25493a;--c-line:#3f7058;--c-edge:#9fd0a0;
+  --c-name:#efeae1;--c-text:#d9d2c8;--c-acc:#9fd0a0;--c-tag:#c4bcb2}
+.c-trajectory{--c-bg:#1a3558;--c-hi:#21426d;--c-line:#3a639a;--c-edge:#F0BC5A;
+  --c-name:#efeae1;--c-text:#d9d2c8;--c-acc:#F0BC5A;--c-tag:#c4bcb2}
+.c-heartquake{--c-bg:#5a2530;--c-hi:#6b2d3a;--c-line:#96505c;--c-edge:#ff9d88;
+  --c-name:#efeae1;--c-text:#d9d2c8;--c-acc:#ff9d88;--c-tag:#c4bcb2}
+.c-wandeling{--c-bg:#f3ede2;--c-hi:#e8dfcd;--c-line:#d8cfbf;--c-edge:#2f5d8a;
+  --c-name:#181614;--c-text:#5b564f;--c-acc:#a8380c;--c-tag:#5f5951}
+
 .top{display:flex;align-items:baseline;justify-content:space-between;gap:18px}
 .name{font-family:var(--serif);font-style:italic;font-weight:400;font-size:23px;
-  letter-spacing:-.2px}
+  letter-spacing:-.2px;color:var(--c-name)}
 .open{font-size:10.5px;letter-spacing:1.7px;text-transform:uppercase;
-  color:var(--accent);white-space:nowrap;flex:0 0 auto}
+  color:var(--c-acc);white-space:nowrap;flex:0 0 auto}
 .open .arw{display:inline-block;margin-left:5px;
   transition:transform .16s ease}
 .card:hover .open .arw{transform:translateX(4px)}
 
-.what{color:var(--dim);font-size:14px;margin:7px 0 0;max-width:58ch}
+.what{color:var(--c-text);font-size:14px;margin:7px 0 0;max-width:58ch}
 .tags{margin:13px 0 0;display:flex;flex-wrap:wrap;gap:7px}
-.tag{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--faint);
-  border:1px solid var(--line);border-radius:2px;padding:4px 9px}
+.tag{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--c-tag);
+  border:1px solid var(--c-line);border-radius:2px;padding:4px 9px}
 
 h2{font-size:10.5px;letter-spacing:2.1px;text-transform:uppercase;color:var(--faint);
   font-weight:400;margin:40px 0 0}
@@ -96,7 +107,7 @@ footer a:hover{color:var(--bone)}
   </header>
 
   <ul class="list">
-    <li><a class="card" href="tide/">
+    <li><a class="card c-tide" href="tide/">
       <span class="top">
         <span class="name">Tide</span>
         <span class="open">Open<span class="arw" aria-hidden="true">&rarr;</span></span>
@@ -106,7 +117,7 @@ footer a:hover{color:var(--bone)}
         lungs, so the phase is readable without looking at the numbers.</p>
       <span class="tags"><span class="tag">breathing</span><span class="tag">no storage</span><span class="tag">audio + haptics</span></span>
     </a></li>
-    <li><a class="card" href="trajectory/">
+    <li><a class="card c-trajectory" href="trajectory/">
       <span class="top">
         <span class="name">Trajectory</span>
         <span class="open">Open<span class="arw" aria-hidden="true">&rarr;</span></span>
@@ -116,7 +127,7 @@ footer a:hover{color:var(--bone)}
         projects ninety days forward.</p>
       <span class="tags"><span class="tag">health</span><span class="tag">local storage only</span><span class="tag">hand-drawn svg chart</span></span>
     </a></li>
-    <li><a class="card" href="heartquake/">
+    <li><a class="card c-heartquake" href="heartquake/">
       <span class="top">
         <span class="name">HeartQuake</span>
         <span class="open">Open<span class="arw" aria-hidden="true">&rarr;</span></span>
@@ -126,7 +137,7 @@ footer a:hover{color:var(--bone)}
         which ones you can't do.</p>
       <span class="tags"><span class="tag">exercise</span><span class="tag">local storage only</span><span class="tag">audio + haptics</span></span>
     </a></li>
-    <li><a class="card" href="wandeling/">
+    <li><a class="card c-wandeling" href="wandeling/">
       <span class="top">
         <span class="name">Wandeling</span>
         <span class="open">Open<span class="arw" aria-hidden="true">&rarr;</span></span>
