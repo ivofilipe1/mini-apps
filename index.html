@@ -42,6 +42,12 @@ h1{font-family:var(--serif);font-style:italic;font-weight:400;
    affordance was :hover, which does not exist on touch — nobody on a phone
    could tell these were links. */
 .list{list-style:none;padding:0;margin:0}
+h2.first{margin-top:0;margin-bottom:14px}
+.list+h2{margin-bottom:14px}
+.pair{display:grid;grid-template-columns:1fr;gap:14px}
+.pair li{display:flex}
+.pair .card{flex:1;margin-bottom:0}
+@media (min-width:560px){.pair{grid-template-columns:1fr 1fr}}
 .card{
   display:block;text-decoration:none;color:inherit;cursor:pointer;
   background:var(--c-bg);border:1px solid var(--c-line);border-left:4px solid var(--c-edge);
@@ -63,8 +69,8 @@ h1{font-family:var(--serif);font-style:italic;font-weight:400;
   --c-name:#efeae1;--c-text:#d9d2c8;--c-acc:#F0BC5A;--c-tag:#c4bcb2}
 .c-heartquake{--c-bg:#5a2530;--c-hi:#6b2d3a;--c-line:#96505c;--c-edge:#ff9d88;
   --c-name:#efeae1;--c-text:#d9d2c8;--c-acc:#ff9d88;--c-tag:#c4bcb2}
-.c-ritme{--c-bg:#3b2a1c;--c-hi:#4a3624;--c-line:#7a5a3c;--c-edge:#e8803a;
-  --c-name:#efeae1;--c-text:#e0d6c8;--c-acc:#f0a066;--c-tag:#cfc3b3}
+.c-ritme{--c-bg:#e6dbc8;--c-hi:#dacdb5;--c-line:#c8bba2;--c-edge:#e8803a;
+  --c-name:#181614;--c-text:#554f48;--c-acc:#9a3209;--c-tag:#554f48}
 .c-wandeling{--c-bg:#f3ede2;--c-hi:#e8dfcd;--c-line:#d8cfbf;--c-edge:#2f5d8a;
   --c-name:#181614;--c-text:#5b564f;--c-acc:#a8380c;--c-tag:#5f5951}
 
@@ -108,6 +114,7 @@ footer a:hover{color:var(--bone)}
       everyday life.</p>
   </header>
 
+  <h2 class="first">Health and wellbeing</h2>
   <ul class="list">
     <li><a class="card c-tide" href="tide/">
       <span class="top">
@@ -139,6 +146,10 @@ footer a:hover{color:var(--bone)}
         which ones you can't do.</p>
       <span class="tags"><span class="tag">exercise</span><span class="tag">local storage only</span><span class="tag">audio + haptics</span></span>
     </a></li>
+  </ul>
+
+  <h2>Dutch learning</h2>
+  <ul class="list pair">
     <li><a class="card c-wandeling" href="wandeling/">
       <span class="top">
         <span class="name">Wandeling</span>
