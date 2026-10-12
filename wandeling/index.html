@@ -374,13 +374,16 @@ input.no{border-color:var(--bad); background:var(--bad-soft);}
 .x:hover{color:var(--bad);}
 .empty{color:var(--ink-faint); font-size:.84rem; padding:1.2rem 0; text-align:center;}
 .back-row{margin-bottom:.9rem;}
-/* first-run scene: the answer is a Dutch sentence with a gap, not a form */
+/* first-run story: a short Dutch narration, then a name for each character */
 .ob-say{display:flex; flex-wrap:wrap; align-items:baseline; gap:.4rem;
   font-size:1.05rem; margin-top:.8rem;}
 .ob-say input{flex:1 1 7rem; min-width:6rem; margin:0; font-size:1rem;}
-.ob-say select{font-family:var(--sans); font-size:1rem; padding:.35rem .4rem;
-  border:1px solid var(--rule); border-radius:8px; background:var(--surface);
-  color:var(--ink);}
+/* name rows: lead-ins in one column and inputs in another, so the inputs line up */
+.ob-rows{display:grid; grid-template-columns:max-content 1fr; gap:.55rem .7rem;
+  align-items:baseline; margin-top:.8rem; font-size:1.05rem;}
+.ob-rows input{margin:0; font-size:1rem; min-width:0;}
+.ob-rows .hint{grid-column:1 / -1; margin:-.2rem 0 0;}
+@media (max-width:420px){ .ob-rows{grid-template-columns:1fr;} }
 .ob-step{font-family:var(--mono); font-size:.7rem; color:var(--ink-faint);}
 .ob-note{font-size:.8rem; color:var(--warn); margin-top:.5rem;}
 .ob-bad{font-size:.8rem; color:var(--bad); margin-top:.5rem;}
@@ -552,10 +555,11 @@ header.top h1{white-space:nowrap;}
       <details class="grp">
         <summary><span class="gt">Who's in your life</span><span class="gs" id="gs-people"></span></summary>
         <div class="gin">
-          <p class="hint" style="margin-top:0">The scenes ship with a cast of
-            stand-ins. Replace any of them with the people you actually talk to and
-            every conversation uses your names instead. Leave a row alone to keep the
-            stand-in. Stored in this browser only.</p>
+          <p class="hint" style="margin-top:0">The scenes have a fixed cast, and each
+            person keeps the gender the scenes give them. Rename any of them and every
+            conversation uses your name instead. Leave a row alone to keep the original.
+            Stored in this browser only.</p>
+          <button class="btn quiet sm" id="people-replay" type="button">Replay the story</button>
           <div id="people"></div>
           <details class="fold" id="people-more">
             <summary>More people and places</summary>
@@ -1307,7 +1311,7 @@ header.top h1{white-space:nowrap;}
       var got = (STATE.people && STATE.people[r.id]) || null;
       var name = got && got.name && got.name.trim();
       if (!name || name === r.default) return;
-      out.push({ from:r.default, to:name,
+      out.push({ from:r.default, to:name, toEn:(got.nameEn || null),
                  fromEn:(r.defaultEn || null), kind:(r.kind || "person") });
     });
     return out;
@@ -1336,7 +1340,8 @@ header.top h1{white-space:nowrap;}
           var poss = wordRe(from, "'s");
           str = str.replace(poss, function(m, pre){ count++; return pre + dutchPossessive(s.to); });
         }
-        str = str.replace(wordRe(from), function(m, pre){ count++; return pre + s.to; });
+        var to = (!isDutch && s.toEn) ? s.toEn : s.to;
+        str = str.replace(wordRe(from), function(m, pre){ count++; return pre + to; });
       });
       return str;
     }
@@ -1461,8 +1466,9 @@ header.top h1{white-space:nowrap;}
           if (!got || typeof got !== "object") return;
           var nm = str(got.name, 40).trim();
           if (!nm) return;
-          STATE.people[r.id] = { name: nm,
-            gender: (got.gender === "m" || got.gender === "f") ? got.gender : (r.gender || "") };
+          STATE.people[r.id] = { name: nm, gender: r.gender || "" };
+          var en = r.kind === "country" ? str(got.nameEn, 40).trim() : "";
+          if (en) STATE.people[r.id].nameEn = en;
         });
         var dropped = (Array.isArray(d.words) ? d.words.length : 0) - STATE.words.length;
         if (dropped > 0) DIAG.dropped = dropped;
@@ -1852,9 +1858,9 @@ header.top h1{white-space:nowrap;}
   var CONFIG  = {};
   /* Which build this is - "short-hash, date" - so a copy someone else has can be
      identified. Set by build.py; empty only if the template is opened unbuilt. */
-  var BUILD   = "d799e09, 2026-10-12";
+  var BUILD   = "4440ecc, 2026-10-12";
   var ROLES   = [{"id":"partner","default":"Elena","gender":"f","label":"Your partner","hint":"lives with you; appears at home and out together","tier":1},{"id":"child","default":"Daan","gender":"m","label":"Your child","hint":"a toddler, turning three","tier":1},{"id":"dog","default":"Rico","gender":"m","label":"Your dog","hint":"walked most days","tier":1},{"id":"town","default":"Nijkerk","kind":"place","label":"Your town","tier":1},{"id":"neighbour","default":"Wouter","gender":"m","label":"Your neighbour","hint":"over the fence, on the street","tier":1},{"id":"friend","default":"Joost","gender":"m","label":"A friend","hint":"walks, the woods, the odd beer","tier":1},{"id":"hostM","default":"Jeroen","gender":"m","label":"A friend who hosts dinner","tier":1},{"id":"sitter","default":"Romy","gender":"f","label":"Your babysitter","tier":1},{"id":"city","default":"Amersfoort","kind":"place","label":"The nearby city","hint":"where the train goes; its main station is 'Amersfoort Centraal' in the scenes","tier":2},{"id":"hostF","default":"Judith","gender":"f","label":"His partner","hint":"hosts the same dinners","tier":2},{"id":"colleague","default":"Mats","gender":"m","label":"A colleague","hint":"sits near you","tier":2},{"id":"theirDog","default":"Flip","gender":"m","label":"Their dog","hint":"lives under the dinner table","tier":2},{"id":"kid","default":"Fenna","gender":"f","label":"A neighbour's child","hint":"eleven; walks the dog with you and never switches to English","tier":2},{"id":"homeland","default":"Italië","defaultEn":"Italy","kind":"country","label":"Where you are from","hint":"a country name differs between the languages, so both spellings are kept","tier":2},{"id":"manager","default":"Bruno","gender":"m","label":"Another colleague","hint":"runs the meetings","tier":2},{"id":"employer","default":"Kadeo","kind":"org","label":"Where you work","tier":2},{"id":"alongLine","default":"Harderwijk","kind":"place","label":"A stop further down the line","hint":"where a colleague carries on to","tier":2},{"id":"me","default":"Sven","kind":"self","label":"Your own first name","hint":"appears in a few example sentences","tier":2}];
-  var ONBOARD = {"_comment":"First-run scene. It asks rather than configures: the role is implied by the question, so no labels are needed, and the answer is Dutch practice rather than a settings form. Ten roles, moving outward from the household to the street, work and friends. The remaining eight live in Settings - not because they are irrelevant (hostM is the second most frequent character in the app) but because fourteen questions would be a form rather than a conversation. Any question can be declined without leaving.","npc":{"name":"Saskia","sprite":"woman-2","role":"someone on the bench"},"backdrop":"park","location":"Op een bankje","intro":"You sit down on the free half of a bench. The woman already there folds her paper and looks like she has time.","introNl":"Je gaat op de vrije helft van een bankje zitten. De vrouw die er al zit vouwt haar krant op en kijkt alsof ze tijd heeft.","closing":"Nice to meet you. Enjoy the walk.","closingNl":"Leuk je te leren kennen. Veel plezier met je wandeling.","steps":[{"role":"me","npcLine":"Ik zie je hier vaak lopen. Hoe heet je eigenlijk?","npcGloss":"I see you walking here often. What's your name, actually?","prefix":"Ik heet","suffix":".","placeholder":"je naam"},{"role":"homeland","npcLine":"Aangenaam. En waar kom je oorspronkelijk vandaan?","npcGloss":"Pleased to meet you. And where are you originally from?","prefix":"Ik kom uit","suffix":".","placeholder":"een land"},{"role":"town","npcLine":"Wat leuk. En waar woon je nu?","npcGloss":"How nice. And where do you live now?","prefix":"Ik woon in","suffix":".","placeholder":"je woonplaats"},{"role":"partner","npcLine":"Woon je daar samen met iemand?","npcGloss":"Do you live there with someone?","prefix":"Ja, met mijn partner.","pronoun":true,"mid":"heet","suffix":".","placeholder":"een naam"},{"role":"child","npcLine":"En hebben jullie kinderen?","npcGloss":"And do you have children?","prefix":"Ja, eentje.","pronoun":true,"mid":"heet","suffix":".","placeholder":"een naam"},{"role":"dog","npcLine":"Ah, gezellig. En hoe heet je hond eigenlijk?","npcGloss":"Ah, lovely. And what's your dog called, actually?","prefix":"","pronoun":true,"suffix":".","placeholder":"een naam","mid":"heet"},{"role":"neighbour","npcLine":"Ken je je buren een beetje?","npcGloss":"And do you know your neighbours a bit?","prefix":"Ja, vooral één.","pronoun":true,"mid":"heet","suffix":".","placeholder":"een naam"},{"role":"employer","npcLine":"Mooi. En waar werk je?","npcGloss":"Good. And where do you work?","prefix":"Ik werk bij","suffix":".","placeholder":"je werk"},{"role":"colleague","npcLine":"En met wie werk je daar het meest samen?","npcGloss":"And who do you work with most there?","prefix":"Met een collega.","suffix":".","placeholder":"een naam","pronoun":true,"mid":"heet"},{"role":"friend","npcLine":"En heb je hier al vrienden gemaakt?","npcGloss":"Have you made friends here yet?","prefix":"Ja. Ik wandel vaak met een vriend.","suffix":".","placeholder":"een naam","pronoun":true,"mid":"heet","prefixF":"Ja. Ik wandel vaak met een vriendin."}],"_pronoun":"A reply that names the person's role can carry gender in the noun itself. 'collega' and 'partner' are the same word either way, but vriend/vriendin are not, so a step may give prefixF and the dropdown swaps the whole clause. The learner sees the noun change as they choose, which is the rule being taught."};
+  var ONBOARD = {"_comment":"First-run story. Twelve short screens: two on the app, one bridge, eight naming the cast, one closing. A story rather than a form: the people in it are fictional, the learner keeps or renames each one, and nothing asks whether the learner really has a dog. Every person role has one gender in the scenes, so gender is stated in the narration and is never a choice. Each name screen lists the roles it names; build.py checks that every role in roles.json is named exactly once. {role} tokens in nl/en show the name chosen earlier.","npc":{"name":"Saskia","sprite":"woman-2","role":"the voice of the story"},"backdrop":"park","location":"Op een bankje","closing":"That's it. You now know the people on your walk. You'll see them again in the conversations. Enjoy!","closingNl":"Dat was het. Je kent nu de mensen van je wandeling. Je ziet ze straks terug in de gesprekken. Veel plezier!","steps":[{"backdrop":"park","location":"Op een bankje","nl":"Welkom bij Wandeling! Elke dag loop je een stukje door een Nederlandse stad. Op elke plek begint een gesprek: bij de bakker, op het station, bij de huisarts.","en":"Welcome to Wandeling! Every day you walk a bit through a Dutch town. At every place a conversation starts: at the baker's, at the station, at the GP."},{"backdrop":"park","location":"Op een bankje","nl":"Jij kiest wat je zegt. Daarna hoor je of dat goed was, een beetje raar of fout, en waarom. Je oefent geen losse woorden, maar echt Nederlands in echte situaties. De woorden die je tegenkomt, kun je bewaren en later nog eens oefenen.","en":"You choose what you say. Then you hear whether it was good, a bit odd or wrong, and why. You don't practise loose words but real Dutch in real situations. You can save the words you meet and practise them again later."},{"backdrop":"park","location":"Op een bankje","nl":"Elke wandeling heeft mensen, en je ontmoet ze steeds opnieuw. In deze introductie kun je hun namen houden of veranderen.","en":"Every walk has people and you will keep meeting them. You can keep or change their names in this intro."},{"backdrop":"park","location":"Op een bankje","nl":"Eerst jij. In het verhaal woon je in Nederland.","en":"First you. In the story you live in the Netherlands.","inputs":[{"role":"me","lead":"Ik heet"},{"role":"homeland","lead":"Ik kom uit"}]},{"backdrop":"home","location":"Thuis","nl":"Je woont in een stad in Nederland, samen met je partner. In dit verhaal is je partner een vrouw.","en":"You live in a town in the Netherlands, together with your partner. In this story your partner is a woman.","inputs":[{"role":"town","lead":"De stad heet"},{"role":"partner","lead":"Zij heet"}]},{"backdrop":"home","location":"Thuis","nl":"Jij en {partner} hebben een zoontje van bijna drie. Jullie hebben ook een hond, die bijna elke dag uit moet.","en":"You and {partner} have a little boy, almost three. You also have a dog who needs to go out almost every day.","inputs":[{"role":"child","lead":"Het zoontje heet"},{"role":"dog","lead":"De hond heet"}]},{"backdrop":"street","location":"In je straat","nl":"In je straat woont een buurman. En een meisje van elf uit de buurt loopt vaak mee als jij met {dog} gaat wandelen.","en":"A neighbour lives on your street. And an eleven-year-old girl from the neighbourhood often walks along when you take {dog} for a walk.","inputs":[{"role":"neighbour","lead":"De buurman heet"},{"role":"kid","lead":"Het meisje heet"}]},{"backdrop":"park","location":"In het bos","nl":"Je hebt een vriend met wie je graag in het bos wandelt. Als jullie samen uitgaan, past een oppas op {child}. De oppas is een vrouw.","en":"You have a friend you like to walk in the woods with. When you two go out together, a babysitter looks after {child}. The babysitter is a woman.","inputs":[{"role":"friend","lead":"De vriend heet"},{"role":"sitter","lead":"De oppas heet"}]},{"backdrop":"dinner","location":"Bij vrienden thuis","nl":"Soms eet je bij vrienden thuis. Onder de tafel ligt hun hond.","en":"Sometimes you eat at friends' place. Under the table lies their dog.","inputs":[{"role":"hostM","lead":"De man heet"},{"role":"hostF","lead":"De vrouw heet"},{"role":"theirDog","lead":"Hun hond heet"}]},{"backdrop":"office","location":"Op je werk","nl":"Je werkt bij een bedrijf. Naast je zit een collega, een man. Een andere man leidt de vergaderingen.","en":"You work at a company. A colleague, a man, sits next to you. Another man runs the meetings.","inputs":[{"role":"employer","lead":"Het bedrijf heet"},{"role":"colleague","lead":"De collega heet"},{"role":"manager","lead":"De man van de vergaderingen heet"}]},{"backdrop":"station","location":"Op het station","nl":"Soms ga je met de trein naar de grote stad. Een collega reist nog verder door.","en":"Sometimes you take the train to the big city. A colleague travels on even further.","inputs":[{"role":"city","lead":"De grote stad heet"},{"role":"alongLine","lead":"De collega reist door naar"}]}]};
   var PALETTE = {"market":{"sky":"#7fc4e8","ground":"#7ab661"},"bakery":{"sky":"#f0d8b0","ground":"#b98a5a"},"cafe":{"sky":"#d9c3a8","ground":"#8a6647"},"station":{"sky":"#9fb4c4","ground":"#6f7b84"},"street":{"sky":"#8fc0e0","ground":"#8b8b8b"},"shop":{"sky":"#dfe4ea","ground":"#9a8f84"},"home":{"sky":"#e8cfae","ground":"#a06f4a"},"park":{"sky":"#8fd0ea","ground":"#5fa04d"},"dinner":{"sky":"#e6c79b","ground":"#8a5c3a"},"neighbor":{"sky":"#a8cfe8","ground":"#7ab661"},"doctor":{"sky":"#e2ebf2","ground":"#b9c4cc"},"friend":{"sky":"#b9d8ea","ground":"#6fa860"},"supermarket":{"sky":"#eef1f4","ground":"#a8adb2"},"library":{"sky":"#e8dcc4","ground":"#8a6f4a"},"office":{"sky":"#dfe6ec","ground":"#8f9aa3"},"restaurant":{"sky":"#3b2a22","ground":"#5a3f30"},"gym":{"sky":"#d8dde2","ground":"#6f7680"},"pharmacy":{"sky":"#e4f0e8","ground":"#aab8ae"},"school":{"sky":"#9fcfe8","ground":"#8a9a6a"},"beach":{"sky":"#8fd4ea","ground":"#e0cfa0"}};
   var PROPS   = {"market":[{"l":"22%","b":"52px","w":"64px","h":"10px","bg":"#c8722f"},{"l":"24%","b":"18px","w":"56px","h":"34px","bg":"#8a5a33"},{"l":"60%","b":"18px","w":"22px","h":"18px","bg":"#b5442f"},{"l":"66%","b":"18px","w":"22px","h":"14px","bg":"#4f7a35"}],"bakery":[{"l":"20%","b":"18px","w":"90px","h":"30px","bg":"#8a6238"},{"l":"24%","b":"48px","w":"20px","h":"12px","bg":"#e8c88a"},{"l":"34%","b":"48px","w":"26px","h":"12px","bg":"#d9ab68"}],"cafe":[{"l":"18%","b":"18px","w":"100px","h":"34px","bg":"#4a3323"},{"l":"22%","b":"52px","w":"12px","h":"12px","bg":"#f2ece0"},{"l":"32%","b":"52px","w":"12px","h":"12px","bg":"#f2ece0"}],"station":[{"l":"0","b":"48px","w":"100%","h":"5px","bg":"#4a4a4a"},{"l":"48%","b":"18px","w":"10px","h":"50px","bg":"#6a6a6a"},{"l":"42%","b":"66px","w":"48px","h":"16px","bg":"#2f5d8a"}],"street":[{"l":"0","b":"40px","w":"100%","h":"6px","bg":"#c9c26a"},{"l":"70%","b":"18px","w":"8px","h":"58px","bg":"#5a5a5a"},{"l":"66%","b":"74px","w":"18px","h":"12px","bg":"#2e7d4f"}],"shop":[{"l":"16%","b":"18px","w":"110px","h":"32px","bg":"#7a6a58"},{"l":"20%","b":"50px","w":"30px","h":"14px","bg":"#b5b0a4"}],"home":[{"l":"18%","b":"18px","w":"84px","h":"26px","bg":"#8a4a3a"},{"l":"58%","b":"18px","w":"10px","h":"44px","bg":"#6a5a48"},{"l":"54%","b":"62px","w":"20px","h":"14px","bg":"#e8d08a"}],"park":[{"l":"14%","b":"18px","w":"10px","h":"34px","bg":"#6b4a2c"},{"l":"6%","b":"48px","w":"46px","h":"32px","bg":"#3f7d3a","br":"50%"},{"l":"62%","b":"18px","w":"52px","h":"8px","bg":"#8a6238"},{"l":"64%","b":"26px","w":"6px","h":"14px","bg":"#8a6238"}],"dinner":[{"l":"14%","b":"18px","w":"120px","h":"14px","bg":"#7a4a28"},{"l":"22%","b":"32px","w":"16px","h":"10px","bg":"#f2ece0"},{"l":"42%","b":"32px","w":"16px","h":"10px","bg":"#f2ece0"},{"l":"32%","b":"32px","w":"12px","h":"16px","bg":"#a8720c"}],"neighbor":[{"l":"40%","b":"18px","w":"6px","h":"54px","bg":"#8a8577"},{"l":"46%","b":"38px","w":"60px","h":"5px","bg":"#8a8577"},{"l":"12%","b":"18px","w":"26px","h":"20px","bg":"#4f7a35"}],"doctor":[{"l":"18%","b":"18px","w":"96px","h":"24px","bg":"#c4ccd2"},{"l":"60%","b":"18px","w":"12px","h":"38px","bg":"#dfe4ea"},{"l":"56%","b":"58px","w":"20px","h":"14px","bg":"#2f5d8a"}],"friend":[{"l":"20%","b":"18px","w":"70px","h":"10px","bg":"#8a6238"},{"l":"22%","b":"28px","w":"6px","h":"14px","bg":"#8a6238"},{"l":"78%","b":"18px","w":"22px","h":"26px","bg":"#3f7d3a","br":"40%"}],"supermarket":[{"l":"14%","b":"18px","w":"30px","h":"50px","bg":"#7f868c"},{"l":"30%","b":"18px","w":"30px","h":"50px","bg":"#7f868c"},{"l":"16%","b":"52px","w":"26px","h":"8px","bg":"#c4392a"},{"l":"32%","b":"52px","w":"26px","h":"8px","bg":"#e0a13a"}],"library":[{"l":"10%","b":"18px","w":"34px","h":"58px","bg":"#5f452c"},{"l":"12%","b":"42px","w":"30px","h":"7px","bg":"#a8763f"},{"l":"12%","b":"58px","w":"30px","h":"7px","bg":"#8a5f38"},{"l":"62%","b":"18px","w":"46px","h":"12px","bg":"#6b4a2c"}],"office":[{"l":"16%","b":"18px","w":"78px","h":"14px","bg":"#5f6a72"},{"l":"24%","b":"32px","w":"26px","h":"18px","bg":"#2b3238"},{"l":"66%","b":"18px","w":"14px","h":"38px","bg":"#7f868c"}],"restaurant":[{"l":"16%","b":"18px","w":"84px","h":"14px","bg":"#7a5238"},{"l":"24%","b":"32px","w":"12px","h":"14px","bg":"#e8dfc8"},{"l":"44%","b":"32px","w":"12px","h":"14px","bg":"#e8dfc8"},{"l":"70%","b":"18px","w":"8px","h":"32px","bg":"#3f2c22"}],"gym":[{"l":"14%","b":"18px","w":"46px","h":"12px","bg":"#3a3f45"},{"l":"12%","b":"30px","w":"10px","h":"18px","bg":"#22262b"},{"l":"46%","b":"30px","w":"10px","h":"18px","bg":"#22262b"},{"l":"70%","b":"18px","w":"26px","h":"38px","bg":"#4a5158"}],"pharmacy":[{"l":"18%","b":"18px","w":"80px","h":"30px","bg":"#8fa896"},{"l":"22%","b":"48px","w":"14px","h":"12px","bg":"#2e7d4f"},{"l":"40%","b":"48px","w":"14px","h":"12px","bg":"#e8f0ea"}],"school":[{"l":"12%","b":"18px","w":"54px","h":"36px","bg":"#b5754a"},{"l":"16%","b":"54px","w":"46px","h":"10px","bg":"#8a4a2a"},{"l":"70%","b":"18px","w":"8px","h":"42px","bg":"#6b4a2c"},{"l":"64%","b":"56px","w":"22px","h":"20px","bg":"#3f7d3a","br":"50%"}],"beach":[{"l":"0","b":"54px","w":"100%","h":"10px","bg":"#5fb6cf"},{"l":"20%","b":"18px","w":"34px","h":"8px","bg":"#c48a4a"},{"l":"24%","b":"26px","w":"6px","h":"22px","bg":"#c48a4a"},{"l":"74%","b":"18px","w":"20px","h":"14px","bg":"#e2531f","br":"6px"}]};
   var SPRITES = {
@@ -2143,34 +2149,53 @@ header.top h1{white-space:nowrap;}
     updateChrome();
   }
 
-  /* ===================== first-run scene =====================
-     Asks instead of configuring: the role is implied by the question, so the
-     answer is a Dutch sentence with a gap rather than a labelled field. Ten
-     roles, moving outward from the household to the street, work and friends;
-     the rest live in Settings, which is also where you go to change one later.
-     said is the step the NPC has already spoken, so a re-render - a pronoun
-     change, a name clash - does not make her repeat the question. */
-  var OB = { step:0, err:null, said:-1 };
-
-  /* vriend becomes vriendin the moment the dropdown says zij. Most role nouns
-     are the same word either way - collega, partner - so only the steps that
-     need it carry prefixF. */
-  function obPrefix(st, pron){
-    return (st.pronoun && pron === "f" && st.prefixF) ? st.prefixF : st.prefix;
-  }
+  /* ===================== first-run story =====================
+     A short Dutch story: what the app is, then the cast. The people are
+     fictional and the learner keeps or renames each one - nothing here asks
+     whether they really own a dog. Every person has one gender in the scenes,
+     so the narration states it and it is never a choice. Each naming screen
+     lists the roles it covers; build.py checks every role is named once.
+     said is the screen the narrator has already spoken, so a re-render (a name
+     clash) does not make her read it again. replay re-runs the story from
+     Settings without touching your place on the walk. */
+  var OB = { step:0, err:null, said:-1, draft:null, replay:false };
 
   function onboardingDue(){
-    return !STATE.onboarded && ONBOARD.steps && ONBOARD.steps.length
-        && STATE.walk.stop === 0 && STATE.walk.turn === 0;
+    return !!(ONBOARD.steps && ONBOARD.steps.length)
+        && (OB.replay || (!STATE.onboarded && STATE.walk.stop === 0 && STATE.walk.turn === 0));
   }
 
   function finishOnboarding(){
     STATE.onboarded = true;
+    OB.replay = false;
     save();
     /* Substitution runs once at load, so the names just given are not in the
        scene text yet. Reloading is the honest way to apply them, and it happens
        exactly once, before the first stop. */
     location.reload();
+  }
+
+  /* {partner} in a story line shows whatever name was given for that role */
+  function obName(id){
+    var r = roleById(id) || {}, g = STATE.people[id];
+    return (g && g.name) || r.default || "";
+  }
+  function obText(t){
+    return (t || "").replace(/\{(\w+)\}/g, function(m, id){ return roleById(id) ? obName(id) : m; });
+  }
+
+  /* Each screen can be somewhere else, so the stage is redrawn when it changes. */
+  function obStage(st){
+    var bd = st.backdrop || ONBOARD.backdrop, loc = st.location || ONBOARD.location;
+    var key = bd + "|" + loc;
+    var cur = document.querySelector("#walk-root .stage");
+    if (!cur || cur.getAttribute("data-ob") === key) return;
+    var tmp = document.createElement("div");
+    tmp.innerHTML = stageHtml({ backdrop:bd, location:loc, npc:ONBOARD.npc, steps:true });
+    var fresh = tmp.firstChild;
+    fresh.setAttribute("data-ob", key);
+    cur.parentNode.replaceChild(fresh, cur);
+    setTimeout(function(){ var pl = document.getElementById("pl"); if (pl) pl.style.transform = "translateX(0)"; }, 50);
   }
 
   function renderOnboarding(){
@@ -2180,6 +2205,7 @@ header.top h1{white-space:nowrap;}
     var steps = ONBOARD.steps, i = OB.step;
 
     if (i >= steps.length){
+      obStage({});
       p.innerHTML = '<div class="who">'+esc(ONBOARD.npc.name)
           + speakBtn(ONBOARD.closingNl, "Hear the line", ONBOARD.npc)+'</div>'
         + '<div class="nl-line">'+esc(ONBOARD.closingNl)+'</div>'
@@ -2191,64 +2217,70 @@ header.top h1{white-space:nowrap;}
     }
 
     var st = steps[i];
-    var role = roleById(st.role) || {};
-    var saved = STATE.people[st.role] || {};
-    var pron = saved.gender || role.gender || "f";
+    obStage(st);
+    var nl = obText(st.nl), en = obText(st.en), inputs = st.inputs || [];
+    var draft = OB.draft || {};
+    var rows = inputs.map(function(spec, n){
+      var r = roleById(spec.role) || {}, g = STATE.people[spec.role] || {};
+      var val = draft["n"+n] != null ? draft["n"+n] : (g.name || r.default || "");
+      var html = '<span>'+esc(spec.lead)+'</span>'
+        + '<input type="text" class="ob-in" data-n="'+n+'" autocomplete="off" maxlength="40" value="'+esc(val)+'">';
+      if (r.kind === "country"){
+        var ev = draft["e"+n] != null ? draft["e"+n] : (g.nameEn || r.defaultEn || "");
+        html += '<span>In English</span>'
+          + '<input type="text" class="ob-en" data-n="'+n+'" autocomplete="off" maxlength="40" value="'+esc(ev)+'">'
+          + '<div class="hint">Change the English only if it is spelled differently.</div>';
+      }
+      return html;
+    }).join("");
 
     p.innerHTML =
         '<div class="talk-head"><span class="ob-step">'+(i+1)+' / '+steps.length+'</span>'
-      + '<button class="reh-ctx-btn" type="button" id="ob-skip">doesn\u2019t apply to me</button></div>'
+      + '<button class="reh-ctx-btn" type="button" id="ob-later">skip the story</button></div>'
       + '<div class="who">'+esc(ONBOARD.npc.name)
-      + speakBtn(st.npcLine, "Hear the line", ONBOARD.npc)+'</div>'
-      + '<div class="nl-line">'+esc(st.npcLine)+'</div>'
-      + '<div class="en-line">'+peekEn(st.npcGloss)+'</div>'
-      + '<div class="ob-say">'
-        + (obPrefix(st, pron) ? '<span>'+esc(obPrefix(st, pron))+'</span>' : "")
-        + (st.pronoun
-            ? '<select id="ob-pron">'
-              + '<option value="f"'+(pron==="f"?" selected":"")+'>Zij</option>'
-              + '<option value="m"'+(pron==="m"?" selected":"")+'>Hij</option></select>'
-              + '<span>'+esc(st.mid)+'</span>'
-            : "")
-        + '<input type="text" id="ob-in" autocomplete="off" maxlength="40"'
-        + ' placeholder="'+esc(st.placeholder)+'" value="'+esc(saved.name || "")+'">'
-        + '<span>'+esc(st.suffix)+'</span>'
-      + '</div>'
+      + speakBtn(nl, "Hear the line", ONBOARD.npc)+'</div>'
+      + '<div class="nl-line">'+esc(nl)+'</div>'
+      + '<div class="en-line">'+peekEn(en)+'</div>'
+      + (rows ? '<div class="ob-rows">'+rows+'</div>' : "")
       + (OB.err ? '<div class="ob-bad">'+esc(OB.err)+'</div>' : "")
       + '<div class="ob-note" id="ob-near" hidden></div>'
-      + (st.pronoun && role.gender && pron !== role.gender
-          ? '<div class="ob-note">The scenes say \u2018'
-            + (role.gender === "f" ? "zij" : "hij")
-            + '\u2019 about this person and that does not change. Only the name does.</div>'
-          : "")
       + '<div class="row2" style="margin-top:.9rem">'
         + '<button class="btn quiet" id="ob-back"'+(i?"":" disabled")+'>Back</button>'
-        + '<button class="btn dark" id="ob-next">'
-        + (i === steps.length-1 ? "Done" : "Next") + '</button></div>'
-      + '<div style="margin-top:.7rem;text-align:center">'
-        + '<button class="reh-ctx-btn" type="button" id="ob-later">do this later, in Settings</button></div>';
+        + '<button class="btn dark" id="ob-next">Next</button></div>';
 
     wireSpeak(p); wirePeek(p);
-    if (OB.said !== i){ OB.said = i; autoSay(st.npcLine, ONBOARD.npc); }
+    if (OB.said !== i){ OB.said = i; autoSay(nl, ONBOARD.npc); }
 
-    var inp = document.getElementById("ob-in");
-    var sel = document.getElementById("ob-pron");
-    if (sel) sel.onchange = function(){
-      STATE.people[st.role] = { name:(STATE.people[st.role]||{}).name || "", gender:sel.value };
-      renderOnboarding();
-    };
+    function field(cls, n){ return p.querySelector('.'+cls+'[data-n="'+n+'"]'); }
 
+    /* A name equal to the stand-in is simply not stored. A clash is refused, and
+       what was typed is kept so the fix is an edit rather than a retype. */
     function commit(){
-      var nm = inp.value.trim();
-      if (nm){
-        var clash = nameClash(nm, st.role);
-        if (clash){ OB.err = nm + " " + clash + "."; OB.near = null; renderOnboarding(); return false; }
-        STATE.people[st.role] = { name:nm, gender:(sel ? sel.value : (role.gender || "")) };
-      } else {
-        delete STATE.people[st.role];
+      OB.err = null; OB.draft = null;
+      var ok = true;
+      inputs.forEach(function(spec, n){
+        if (!ok) return;
+        var r = roleById(spec.role) || {};
+        var nm = field("ob-in", n).value.trim();
+        var enEl = field("ob-en", n);
+        var en = enEl ? enEl.value.trim() : "";
+        if (!nm || nm === r.default){ delete STATE.people[spec.role]; return; }
+        var clash = nameClash(nm, spec.role);
+        if (clash){ OB.err = nm + " " + clash + "."; ok = false; return; }
+        var rec = { name:nm, gender:(r.gender || "") };
+        if (en && en !== r.defaultEn) rec.nameEn = en;
+        STATE.people[spec.role] = rec;
+      });
+      if (!ok){
+        OB.draft = {};
+        inputs.forEach(function(spec, n){
+          OB.draft["n"+n] = field("ob-in", n).value;
+          var e = field("ob-en", n); if (e) OB.draft["e"+n] = e.value;
+        });
       }
-      OB.err = null; save();
-      return true;
+      save();
+      if (!ok) renderOnboarding();
+      return ok;
     }
 
     document.getElementById("ob-next").onclick = function(){
@@ -2257,28 +2289,31 @@ header.top h1{white-space:nowrap;}
     document.getElementById("ob-back").onclick = function(){
       if (commit()){ OB.step--; renderOnboarding(); }
     };
-    /* Every question here is a yes/no one whose only reply is yes. Someone
-       who lives alone or has no children could not answer truthfully, so a
-       question can be declined without leaving the scene. */
-    document.getElementById("ob-skip").onclick = function(){
-      delete STATE.people[st.role];
-      OB.err = null; save();
-      OB.step++; renderOnboarding();
-    };
     document.getElementById("ob-later").onclick = function(){
-      STATE.onboarded = true; save(); render();
+      /* names already given are not in the scenes until a reload */
+      if (Object.keys(STATE.people).length){ finishOnboarding(); return; }
+      STATE.onboarded = true; OB.replay = false; save(); render();
     };
+
     var near = document.getElementById("ob-near");
-    inp.oninput = function(){
-      var msg = nameNear(inp.value, st.role);
-      near.textContent = msg || "";
-      near.hidden = !msg;
-    };
-    inp.oninput();
-    inp.onkeydown = function(e){
-      if (e.key === "Enter"){ e.preventDefault(); document.getElementById("ob-next").click(); }
-    };
-    inp.focus();
+    function refreshNear(){
+      var msgs = [];
+      inputs.forEach(function(spec, n){
+        var m = nameNear(field("ob-in", n).value, spec.role);
+        if (m) msgs.push(m);
+      });
+      near.textContent = msgs.join(" ");
+      near.hidden = !msgs.length;
+    }
+    p.querySelectorAll(".ob-in, .ob-en").forEach(function(el){
+      el.oninput = refreshNear;
+      el.onkeydown = function(e){
+        if (e.key === "Enter"){ e.preventDefault(); document.getElementById("ob-next").click(); }
+      };
+    });
+    refreshNear();
+    var first = p.querySelector(".ob-in");
+    if (first) first.focus();
   }
 
   function renderIntro(sc){
@@ -3590,8 +3625,11 @@ header.top h1{white-space:nowrap;}
             var got = inc.people[r.id];
             if (!got || STATE.people[r.id]) return;
             var nm = str(got.name, 40).trim();
-            if (nm) STATE.people[r.id] = { name: nm,
-              gender: (got.gender === "m" || got.gender === "f") ? got.gender : (r.gender || "") };
+            if (nm){
+              STATE.people[r.id] = { name: nm, gender: r.gender || "" };
+              var en = r.kind === "country" ? str(got.nameEn, 40).trim() : "";
+              if (en) STATE.people[r.id].nameEn = en;
+            }
           });
         }
 
@@ -4223,23 +4261,17 @@ header.top h1{white-space:nowrap;}
       var got = STATE.people[r.id] || {};
       var val = got.name || "";
       var isPerson = !r.kind;
-      var sceneG = r.gender === "f" ? "she" : r.gender === "m" ? "he" : null;
-      var chosen = got.gender || r.gender || "";
-      var mismatch = isPerson && chosen && r.gender && chosen !== r.gender;
+      var sceneG = r.gender === "f" ? "she" : r.gender === "m" ? "he" : "";
       return '<div class="prow" data-role="'+esc(r.id)+'">'
         + '<div class="pl">'+esc(r.label)+'</div>'
-        + (isPerson
-            ? '<select data-g="'+esc(r.id)+'">'
-              + '<option value="f"'+(chosen==="f"?" selected":"")+'>she</option>'
-              + '<option value="m"'+(chosen==="m"?" selected":"")+'>he</option></select>'
-            : '<span class="talk-count">'+esc(r.kind)+'</span>')
+        + '<span class="talk-count">'+esc(isPerson ? sceneG : r.kind)+'</span>'
         + '<input type="text" data-p="'+esc(r.id)+'" autocomplete="off" maxlength="40"'
         + ' placeholder="'+esc(r.default)+'" value="'+esc(val)+'" style="grid-column:1 / -1">'
+        + (r.kind === "country"
+            ? '<input type="text" data-pen="'+esc(r.id)+'" autocomplete="off" maxlength="40"'
+              + ' placeholder="English: '+esc(r.defaultEn || r.default)+'" value="'+esc(got.nameEn || "")+'"'
+              + ' style="grid-column:1 / -1">' : "")
         + (r.hint ? '<div class="pd">'+esc(r.hint)+'</div>' : "")
-        + (sceneG ? '<div class="pd">written as \u2018'+sceneG+'\u2019 in the scenes</div>' : "")
-        + (mismatch
-            ? '<div class="warn">The scenes still say \u2018'+sceneG+'\u2019 about this person. '
-              + 'Names change; the Dutch around them does not.</div>' : "")
         + '<div class="bad" data-err="'+esc(r.id)+'" hidden></div>'
         + '</div>';
     }
@@ -4266,24 +4298,35 @@ header.top h1{white-space:nowrap;}
         if (clash){ return; }
         if (!nm) delete STATE.people[id];
         else {
-          var r = roleById(id);
-          STATE.people[id] = { name:nm,
-            gender:(STATE.people[id] && STATE.people[id].gender) || r.gender || "" };
+          var r = roleById(id), keepEn = STATE.people[id] && STATE.people[id].nameEn;
+          STATE.people[id] = { name:nm, gender:r.gender || "" };
+          if (keepEn) STATE.people[id].nameEn = keepEn;
         }
         save();
         flashPeople();
       });
     });
-    document.querySelectorAll("#people [data-g], #people2 [data-g]").forEach(function(sel){
-      sel.addEventListener("change", function(){
-        var id = sel.getAttribute("data-g");
-        var r = roleById(id);
-        STATE.people[id] = { name:(STATE.people[id] && STATE.people[id].name) || "",
-                             gender: sel.value };
-        if (!STATE.people[id].name) STATE.people[id].name = "";
-        save(); renderPeople();
+    document.querySelectorAll("#people [data-pen], #people2 [data-pen]").forEach(function(inp){
+      inp.addEventListener("change", function(){
+        var id = inp.getAttribute("data-pen");
+        var errEl = document.querySelector('[data-err="'+id+'"]');
+        var got = STATE.people[id];
+        if (!got || !got.name){
+          errEl.hidden = false; errEl.className = "bad";
+          errEl.textContent = "Enter the Dutch name first.";
+          inp.value = ""; return;
+        }
+        errEl.hidden = true;
+        var en = inp.value.trim();
+        if (en) got.nameEn = en; else delete got.nameEn;
+        save(); flashPeople();
       });
     });
+    var rp = document.getElementById("people-replay");
+    if (rp) rp.onclick = function(){
+      OB.step = 0; OB.err = null; OB.draft = null; OB.said = -1; OB.replay = true;
+      switchView("walk");
+    };
   }
 
   /* Substitution happens once at load, so a change here needs a reload to take
