@@ -14,6 +14,7 @@ Live at **[ivofilipe1.github.io/mini-apps](https://ivofilipe1.github.io/mini-app
 | [trajectory](trajectory/) | Single-file weight and calorie tracker. Smooths the scale, fits your real energy expenditure from your own logs, and projects 90 days forward | [open](https://ivofilipe1.github.io/mini-apps/trajectory/) |
 | [heartquake](heartquake/) | Six fixed 15-minute bodyweight routines — 5 min warm-up, 10 min work. Compound exercises only, no equipment needed, remembers what you can't do | [open](https://ivofilipe1.github.io/mini-apps/heartquake/) |
 | [wandeling](wandeling/) | Dutch practice by conversation: ninety fixed everyday scenes, spaced repetition and rehearsal, with the Dutch read aloud by your device's voice. Source-available, not MIT | pending |
+| [ritme](ritme/) | Dutch grammar companion to wandeling: a rule card per topic, then quick mixed runs with spaced repetition, word-chip sentence building and listening cards. 880 cards. MIT, except 150 de/het cards under CC BY-SA 4.0 | [open](https://ivofilipe1.github.io/mini-apps/ritme/) |
 
 ## Conventions
 

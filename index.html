@@ -55,7 +55,7 @@ h1{font-family:var(--serif);font-style:italic;font-weight:400;
 
 /* One palette per app, taken from the app itself. Dark cards sit at L* 22-23
    against the L* 12 panel; Wandeling is cream because its own page is. Accent
-   text is 5.6-7.1:1 on the card and 4.9-5.8:1 on hover, so the small "Open"
+   text is 5.6-7.1:1 on the card and 4.9-6.5:1 on hover, so the small "Open"
    label passes AA in both states. */
 .c-tide{--c-bg:#1f3d2f;--c-hi:#25493a;--c-line:#3f7058;--c-edge:#9fd0a0;
   --c-name:#efeae1;--c-text:#d9d2c8;--c-acc:#9fd0a0;--c-tag:#c4bcb2}
@@ -63,6 +63,8 @@ h1{font-family:var(--serif);font-style:italic;font-weight:400;
   --c-name:#efeae1;--c-text:#d9d2c8;--c-acc:#F0BC5A;--c-tag:#c4bcb2}
 .c-heartquake{--c-bg:#5a2530;--c-hi:#6b2d3a;--c-line:#96505c;--c-edge:#ff9d88;
   --c-name:#efeae1;--c-text:#d9d2c8;--c-acc:#ff9d88;--c-tag:#c4bcb2}
+.c-ritme{--c-bg:#3b2a1c;--c-hi:#4a3624;--c-line:#7a5a3c;--c-edge:#e8803a;
+  --c-name:#efeae1;--c-text:#e0d6c8;--c-acc:#f0a066;--c-tag:#cfc3b3}
 .c-wandeling{--c-bg:#f3ede2;--c-hi:#e8dfcd;--c-line:#d8cfbf;--c-edge:#2f5d8a;
   --c-name:#181614;--c-text:#5b564f;--c-acc:#a8380c;--c-tag:#5f5951}
 
@@ -147,6 +149,16 @@ footer a:hover{color:var(--bone)}
         repetition, and the Dutch is read aloud by your device.</p>
       <span class="tags"><span class="tag">language</span><span class="tag">local storage only</span><span class="tag">noncommercial licence</span></span>
     </a></li>
+    <li><a class="card c-ritme" href="ritme/">
+      <span class="top">
+        <span class="name">Ritme</span>
+        <span class="open">Open<span class="arw" aria-hidden="true">&rarr;</span></span>
+      </span>
+      <p class="what">Dutch grammar, rule first. A short card per topic, then quick runs of
+        twelve: word order, verb forms, de/het and listening to casual speech. Misses
+        come back until they stick. The companion to Wandeling.</p>
+      <span class="tags"><span class="tag">language</span><span class="tag">local storage only</span><span class="tag">audio</span></span>
+    </a></li>
   </ul>
 
   <h2>Why this exists</h2>
@@ -158,7 +170,7 @@ footer a:hover{color:var(--bone)}
     enable quick habits on the go, with the ability to track progress on short term.</p>
 
   <footer>
-    Source on <a href="https://github.com/ivofilipe1/mini-apps">GitHub</a> · MIT licensed, except Wandeling (PolyForm Noncommercial) ·
+    Source on <a href="https://github.com/ivofilipe1/mini-apps">GitHub</a> · MIT licensed, except Wandeling (PolyForm Noncommercial) and Ritme’s de/het cards (CC BY-SA 4.0) ·
     These are personal tools, not medical devices, and nothing here is medical advice.
   </footer>
 
