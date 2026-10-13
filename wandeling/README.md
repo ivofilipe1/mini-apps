@@ -87,8 +87,8 @@ that is not public. Its build script splices the scenes, the sentence data and t
 font into one HTML file.
 
 The commit hash below refers to that repository, so it cannot be looked up from
-here. The copy committed here was built from commit `4440ecc` on 2026-10-12. Settings →
-diagnostics in the app shows the same stamp (`4440ecc, 2026-10-12`). The stamp never
+here. The copy committed here was built from commit `6e50ebc` on 2026-10-13. Settings →
+diagnostics in the app shows the same stamp (`6e50ebc, 2026-10-13`). The stamp never
 ends in `+edits`: that suffix means the build came from a tree with uncommitted
 changes, and such a build is not published here.
 

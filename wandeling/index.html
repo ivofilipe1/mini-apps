@@ -596,6 +596,18 @@ header.top h1{white-space:nowrap;}
             <button class="btn outline sm" id="llm-clearkey">Clear key</button>
           </div>
           <details class="fold">
+            <summary>Models (advanced)</summary>
+            <div class="in">
+              <p class="hint" style="margin-top:0">Leave both empty to use the built-in model
+                names. Providers retire models from time to time; if Test says a model
+                was not found, put a current name here.</p>
+              <label class="lb" for="llm-mq">Quick model</label>
+              <input type="text" id="llm-mq" autocomplete="off" spellcheck="false">
+              <label class="lb" for="llm-md">Default model</label>
+              <input type="text" id="llm-md" autocomplete="off" spellcheck="false">
+            </div>
+          </details>
+          <details class="fold">
             <summary>Use a proxy instead of a key</summary>
             <div class="in">
               <label class="lb" for="llm-url">Endpoint</label>
@@ -821,7 +833,7 @@ header.top h1{white-space:nowrap;}
     openai: { name:"OpenAI (browser support unverified)",
               models:{ quick:"gpt-4o-mini", "default":"gpt-4o" } },
     gemini: { name:"Gemini (browser support unverified)",
-              models:{ quick:"gemini-2.0-flash-lite", "default":"gemini-2.0-flash" } }
+              models:{ quick:"gemini-3.5-flash-lite", "default":"gemini-3.8-flash" } }
   };
   function directReady(){
     var l = STATE.llm || {};
@@ -845,7 +857,10 @@ header.top h1{white-space:nowrap;}
      artifact runtime and no endpoint. No streaming, same as the endpoint path. */
   async function askDirect(opts){
     var l = STATE.llm, prov = l.provider, key = l.key;
-    var model = PROVIDERS[prov].models[opts.tier || "quick"] || PROVIDERS[prov].models.quick;
+    var tier = opts.tier || "quick";
+    /* a person's own id beats the built-in one, so a retired model is a setting,
+       not a new build */
+    var model = (l.models && l.models[tier]) || PROVIDERS[prov].models[tier] || PROVIDERS[prov].models.quick;
     var url, headers = { "content-type":"application/json" }, body;
     if (prov === "claude"){
       url = "https://api.anthropic.com/v1/messages";
@@ -858,7 +873,7 @@ header.top h1{white-space:nowrap;}
       headers["authorization"] = "Bearer " + key;
       body = { model:model, max_tokens:1024, messages:opts.turns };
     } else {
-      url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent";
+      url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent";
       headers["x-goog-api-key"] = key;
       body = { contents: opts.turns.map(function(t){
         return { role: t.role === "assistant" ? "model" : "user", parts:[{ text:t.content }] };
@@ -877,8 +892,12 @@ header.top h1{white-space:nowrap;}
     var data = null;
     try { data = await res.json(); } catch(e){}
     if (!res.ok){
-      var fe = new Error((data && data.error && data.error.message) || ("http " + res.status));
+      var detail = (data && data.error && typeof data.error.message === "string") ? data.error.message : "";
+      var fe = new Error(detail || ("http " + res.status));
       fe.code = HTTP_CODES[res.status] || "unavailable";
+      fe.status = res.status;
+      /* what the provider said, for the Test button; never the key itself */
+      fe.detail = detail.split(key).join("[key]").slice(0, 200);
       throw fe;
     }
     var text = "";
@@ -1551,11 +1570,18 @@ header.top h1{white-space:nowrap;}
   }
   /* The key is the one secret this app ever holds. It is rebuilt from a fixed
      field list like everything else, and only kept alongside a known provider. */
+  /* A model id ends up in a request URL, so only plain id characters pass. */
+  function cleanModel(x){
+    var m = str(x, 80).trim();
+    return /^[A-Za-z0-9._-]+$/.test(m) ? m : "";
+  }
   function cleanLlm(v){
     v = (v && typeof v === "object") ? v : {};
     var prov = PROVIDERS[v.provider] ? v.provider : "";
+    var mo = (prov && v.models && typeof v.models === "object") ? v.models : {};
     return { endpoint: cleanEndpoint(v.endpoint), provider: prov,
-             key: prov ? str(v.key, 300).trim() : "" };
+             key: prov ? str(v.key, 300).trim() : "",
+             models: { quick: cleanModel(mo.quick), "default": cleanModel(mo["default"]) } };
   }
   function cleanErrand(e){
     if (!e || typeof e !== "object") return null;
@@ -1858,7 +1884,7 @@ header.top h1{white-space:nowrap;}
   var CONFIG  = {};
   /* Which build this is - "short-hash, date" - so a copy someone else has can be
      identified. Set by build.py; empty only if the template is opened unbuilt. */
-  var BUILD   = "4440ecc, 2026-10-12";
+  var BUILD   = "6e50ebc, 2026-10-13";
   var ROLES   = [{"id":"partner","default":"Elena","gender":"f","label":"Your partner","hint":"lives with you; appears at home and out together","tier":1},{"id":"child","default":"Daan","gender":"m","label":"Your child","hint":"a toddler, turning three","tier":1},{"id":"dog","default":"Rico","gender":"m","label":"Your dog","hint":"walked most days","tier":1},{"id":"town","default":"Nijkerk","kind":"place","label":"Your town","tier":1},{"id":"neighbour","default":"Wouter","gender":"m","label":"Your neighbour","hint":"over the fence, on the street","tier":1},{"id":"friend","default":"Joost","gender":"m","label":"A friend","hint":"walks, the woods, the odd beer","tier":1},{"id":"hostM","default":"Jeroen","gender":"m","label":"A friend who hosts dinner","tier":1},{"id":"sitter","default":"Romy","gender":"f","label":"Your babysitter","tier":1},{"id":"city","default":"Amersfoort","kind":"place","label":"The nearby city","hint":"where the train goes; its main station is 'Amersfoort Centraal' in the scenes","tier":2},{"id":"hostF","default":"Judith","gender":"f","label":"His partner","hint":"hosts the same dinners","tier":2},{"id":"colleague","default":"Mats","gender":"m","label":"A colleague","hint":"sits near you","tier":2},{"id":"theirDog","default":"Flip","gender":"m","label":"Their dog","hint":"lives under the dinner table","tier":2},{"id":"kid","default":"Fenna","gender":"f","label":"A neighbour's child","hint":"eleven; walks the dog with you and never switches to English","tier":2},{"id":"homeland","default":"Italië","defaultEn":"Italy","kind":"country","label":"Where you are from","hint":"a country name differs between the languages, so both spellings are kept","tier":2},{"id":"manager","default":"Bruno","gender":"m","label":"Another colleague","hint":"runs the meetings","tier":2},{"id":"employer","default":"Kadeo","kind":"org","label":"Where you work","tier":2},{"id":"alongLine","default":"Harderwijk","kind":"place","label":"A stop further down the line","hint":"where a colleague carries on to","tier":2},{"id":"me","default":"Sven","kind":"self","label":"Your own first name","hint":"appears in a few example sentences","tier":2}];
   var ONBOARD = {"_comment":"First-run story. Twelve short screens: two on the app, one bridge, eight naming the cast, one closing. A story rather than a form: the people in it are fictional, the learner keeps or renames each one, and nothing asks whether the learner really has a dog. Every person role has one gender in the scenes, so gender is stated in the narration and is never a choice. Each name screen lists the roles it names; build.py checks that every role in roles.json is named exactly once. {role} tokens in nl/en show the name chosen earlier.","npc":{"name":"Saskia","sprite":"woman-2","role":"the voice of the story"},"backdrop":"park","location":"Op een bankje","closing":"That's it. You now know the people on your walk. You'll see them again in the conversations. Enjoy!","closingNl":"Dat was het. Je kent nu de mensen van je wandeling. Je ziet ze straks terug in de gesprekken. Veel plezier!","steps":[{"backdrop":"park","location":"Op een bankje","nl":"Welkom bij Wandeling! Elke dag loop je een stukje door een Nederlandse stad. Op elke plek begint een gesprek: bij de bakker, op het station, bij de huisarts.","en":"Welcome to Wandeling! Every day you walk a bit through a Dutch town. At every place a conversation starts: at the baker's, at the station, at the GP."},{"backdrop":"park","location":"Op een bankje","nl":"Jij kiest wat je zegt. Daarna hoor je of dat goed was, een beetje raar of fout, en waarom. Je oefent geen losse woorden, maar echt Nederlands in echte situaties. De woorden die je tegenkomt, kun je bewaren en later nog eens oefenen.","en":"You choose what you say. Then you hear whether it was good, a bit odd or wrong, and why. You don't practise loose words but real Dutch in real situations. You can save the words you meet and practise them again later."},{"backdrop":"park","location":"Op een bankje","nl":"Elke wandeling heeft mensen, en je ontmoet ze steeds opnieuw. In deze introductie kun je hun namen houden of veranderen.","en":"Every walk has people and you will keep meeting them. You can keep or change their names in this intro."},{"backdrop":"park","location":"Op een bankje","nl":"Eerst jij. In het verhaal woon je in Nederland.","en":"First you. In the story you live in the Netherlands.","inputs":[{"role":"me","lead":"Ik heet"},{"role":"homeland","lead":"Ik kom uit"}]},{"backdrop":"home","location":"Thuis","nl":"Je woont in een stad in Nederland, samen met je partner. In dit verhaal is je partner een vrouw.","en":"You live in a town in the Netherlands, together with your partner. In this story your partner is a woman.","inputs":[{"role":"town","lead":"De stad heet"},{"role":"partner","lead":"Zij heet"}]},{"backdrop":"home","location":"Thuis","nl":"Jij en {partner} hebben een zoontje van bijna drie. Jullie hebben ook een hond, die bijna elke dag uit moet.","en":"You and {partner} have a little boy, almost three. You also have a dog who needs to go out almost every day.","inputs":[{"role":"child","lead":"Het zoontje heet"},{"role":"dog","lead":"De hond heet"}]},{"backdrop":"street","location":"In je straat","nl":"In je straat woont een buurman. En een meisje van elf uit de buurt loopt vaak mee als jij met {dog} gaat wandelen.","en":"A neighbour lives on your street. And an eleven-year-old girl from the neighbourhood often walks along when you take {dog} for a walk.","inputs":[{"role":"neighbour","lead":"De buurman heet"},{"role":"kid","lead":"Het meisje heet"}]},{"backdrop":"park","location":"In het bos","nl":"Je hebt een vriend met wie je graag in het bos wandelt. Als jullie samen uitgaan, past een oppas op {child}. De oppas is een vrouw.","en":"You have a friend you like to walk in the woods with. When you two go out together, a babysitter looks after {child}. The babysitter is a woman.","inputs":[{"role":"friend","lead":"De vriend heet"},{"role":"sitter","lead":"De oppas heet"}]},{"backdrop":"dinner","location":"Bij vrienden thuis","nl":"Soms eet je bij vrienden thuis. Onder de tafel ligt hun hond.","en":"Sometimes you eat at friends' place. Under the table lies their dog.","inputs":[{"role":"hostM","lead":"De man heet"},{"role":"hostF","lead":"De vrouw heet"},{"role":"theirDog","lead":"Hun hond heet"}]},{"backdrop":"office","location":"Op je werk","nl":"Je werkt bij een bedrijf. Naast je zit een collega, een man. Een andere man leidt de vergaderingen.","en":"You work at a company. A colleague, a man, sits next to you. Another man runs the meetings.","inputs":[{"role":"employer","lead":"Het bedrijf heet"},{"role":"colleague","lead":"De collega heet"},{"role":"manager","lead":"De man van de vergaderingen heet"}]},{"backdrop":"station","location":"Op het station","nl":"Soms ga je met de trein naar de grote stad. Een collega reist nog verder door.","en":"Sometimes you take the train to the big city. A colleague travels on even further.","inputs":[{"role":"city","lead":"De grote stad heet"},{"role":"alongLine","lead":"De collega reist door naar"}]}]};
   var PALETTE = {"market":{"sky":"#7fc4e8","ground":"#7ab661"},"bakery":{"sky":"#f0d8b0","ground":"#b98a5a"},"cafe":{"sky":"#d9c3a8","ground":"#8a6647"},"station":{"sky":"#9fb4c4","ground":"#6f7b84"},"street":{"sky":"#8fc0e0","ground":"#8b8b8b"},"shop":{"sky":"#dfe4ea","ground":"#9a8f84"},"home":{"sky":"#e8cfae","ground":"#a06f4a"},"park":{"sky":"#8fd0ea","ground":"#5fa04d"},"dinner":{"sky":"#e6c79b","ground":"#8a5c3a"},"neighbor":{"sky":"#a8cfe8","ground":"#7ab661"},"doctor":{"sky":"#e2ebf2","ground":"#b9c4cc"},"friend":{"sky":"#b9d8ea","ground":"#6fa860"},"supermarket":{"sky":"#eef1f4","ground":"#a8adb2"},"library":{"sky":"#e8dcc4","ground":"#8a6f4a"},"office":{"sky":"#dfe6ec","ground":"#8f9aa3"},"restaurant":{"sky":"#3b2a22","ground":"#5a3f30"},"gym":{"sky":"#d8dde2","ground":"#6f7680"},"pharmacy":{"sky":"#e4f0e8","ground":"#aab8ae"},"school":{"sky":"#9fcfe8","ground":"#8a9a6a"},"beach":{"sky":"#8fd4ea","ground":"#e0cfa0"}};
@@ -3454,13 +3480,18 @@ header.top h1{white-space:nowrap;}
     key.value = "";
     key.placeholder = STATE.llm.key ? "saved — ends …" + STATE.llm.key.slice(-4)
                                     : "paste your own key";
+    var mq = document.getElementById("llm-mq"), md = document.getElementById("llm-md");
+    var mo = STATE.llm.models || {};
+    var dm = PROVIDERS[STATE.llm.provider] ? PROVIDERS[STATE.llm.provider].models : { quick:"", "default":"" };
+    mq.value = mo.quick || "";  mq.placeholder = dm.quick || "model id";
+    md.value = mo["default"] || ""; md.placeholder = dm["default"] || "model id";
 
     llmReady().then(function(api){
       var where = llmSourceLabel();
       var locked = !ownOrigin();
       /* On a shared site the key, provider and endpoint are switched off; only
          the artifact runtime, which needs none of them, can still answer. */
-      [prov, key, inp, document.getElementById("llm-clearkey"),
+      [prov, key, inp, mq, md, document.getElementById("llm-clearkey"),
        document.getElementById("llm-clear")].forEach(function(el){ el.disabled = locked; });
       document.getElementById("llm-test").disabled = locked && !api;
       box.innerHTML = '<div class="'+(where ? "pd" : "warn")+'">'
@@ -3495,11 +3526,23 @@ header.top h1{white-space:nowrap;}
          send it to the wrong company */
       var changed = prov.value !== (STATE.llm.provider || "");
       STATE.llm.provider = PROVIDERS[prov.value] ? prov.value : "";
-      if (changed) STATE.llm.key = "";
+      if (changed){ STATE.llm.key = ""; STATE.llm.models = { quick:"", "default":"" }; }
       save(); renderLlm(); refreshLlm();
       msg.className = "msg";
       msg.textContent = changed && STATE.llm.provider ? "Now paste a key for " + PROVIDERS[STATE.llm.provider].name.split(" ")[0] + "." : "";
     };
+    function saveModels(){
+      var q = cleanModel(mq.value), d = cleanModel(md.value);
+      if ((mq.value.trim() && !q) || (md.value.trim() && !d)){
+        msg.className = "msg err";
+        msg.textContent = "Model names use letters, numbers, dots, dashes and underscores only.";
+        return;
+      }
+      STATE.llm.models = { quick:q, "default":d };
+      save();
+      msg.className = "msg ok"; msg.textContent = "Saved. Use \u201cTest it\u201d to check it.";
+    }
+    mq.onchange = saveModels; md.onchange = saveModels;
     key.onchange = function(){
       var v = key.value.trim().slice(0, 300);
       if (!v) return;
@@ -3546,7 +3589,8 @@ header.top h1{white-space:nowrap;}
         msg.textContent = "Working. It said: " + (r.text || "").slice(0, 60);
       } catch(e){
         msg.className = "msg err";
-        msg.textContent = "Failed (" + e.code + "). " + askErrorText(e.code);
+        msg.textContent = "Failed (" + e.code + "). " + askErrorText(e.code)
+          + (e.status ? " The provider said HTTP " + e.status + (e.detail ? ": " + e.detail : "") + "." : "");
       }
     };
   }
